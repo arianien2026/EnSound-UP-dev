@@ -33,9 +33,6 @@ jobs:
         run: npm ci
 
       - name: Build
-        env:
-          VITE_POSTHOG_PROJECT_TOKEN: ${{ secrets.VITE_POSTHOG_PROJECT_TOKEN }}
-          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
         run: npm run build
 
       - name: Setup Pages
