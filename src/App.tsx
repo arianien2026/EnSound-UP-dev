@@ -75,14 +75,136 @@ const SOUND_MAP = {
   ],
 } satisfies Record<'A' | 'E' | 'I' | 'O' | 'U', SoundMapEntry[]>
 
+const VOWEL_WORD_SUPPORT: Record<string, { partOfSpeech: string; meaningZh: string }> = {
+  about: { partOfSpeech: 'prep.', meaningZh: '關於' },
+  adept: { partOfSpeech: 'adj.', meaningZh: '熟練的' },
+  adopt: { partOfSpeech: 'v.', meaningZh: '收養' },
+  ago: { partOfSpeech: 'adv.', meaningZh: '以前' },
+  all: { partOfSpeech: 'pron.', meaningZh: '全部' },
+  any: { partOfSpeech: 'det.', meaningZh: '任何' },
+  apple: { partOfSpeech: 'n.', meaningZh: '蘋果' },
+  audible: { partOfSpeech: 'adj.', meaningZh: '聽得見的' },
+  away: { partOfSpeech: 'adv.', meaningZh: '在遠處' },
+  bad: { partOfSpeech: 'adj.', meaningZh: '壞的' },
+  ball: { partOfSpeech: 'n.', meaningZh: '球' },
+  bat: { partOfSpeech: 'n.', meaningZh: '蝙蝠' },
+  bead: { partOfSpeech: 'n.', meaningZh: '珠子' },
+  bean: { partOfSpeech: 'n.', meaningZh: '豆子' },
+  beat: { partOfSpeech: 'v.', meaningZh: '敲打' },
+  bed: { partOfSpeech: 'n.', meaningZh: '床' },
+  bet: { partOfSpeech: 'v.', meaningZh: '打賭' },
+  bid: { partOfSpeech: 'v.', meaningZh: '出價' },
+  big: { partOfSpeech: 'adj.', meaningZh: '大的' },
+  bit: { partOfSpeech: 'n.', meaningZh: '一小塊' },
+  bog: { partOfSpeech: 'n.', meaningZh: '沼澤' },
+  bomb: { partOfSpeech: 'n.', meaningZh: '炸彈' },
+  boom: { partOfSpeech: 'n.', meaningZh: '巨響' },
+  boon: { partOfSpeech: 'n.', meaningZh: '好處' },
+  boot: { partOfSpeech: 'n.', meaningZh: '靴子' },
+  bot: { partOfSpeech: 'n.', meaningZh: '機器人' },
+  bud: { partOfSpeech: 'n.', meaningZh: '花苞' },
+  bun: { partOfSpeech: 'n.', meaningZh: '小圓麵包' },
+  but: { partOfSpeech: 'conj.', meaningZh: '但是' },
+  cake: { partOfSpeech: 'n.', meaningZh: '蛋糕' },
+  cap: { partOfSpeech: 'n.', meaningZh: '帽子' },
+  cat: { partOfSpeech: 'n.', meaningZh: '貓' },
+  coop: { partOfSpeech: 'n.', meaningZh: '雞舍' },
+  cop: { partOfSpeech: 'n.', meaningZh: '警察' },
+  cot: { partOfSpeech: 'n.', meaningZh: '折疊床' },
+  cup: { partOfSpeech: 'n.', meaningZh: '杯子' },
+  cut: { partOfSpeech: 'v.', meaningZh: '切' },
+  did: { partOfSpeech: 'v.', meaningZh: '做了' },
+  do: { partOfSpeech: 'v.', meaningZh: '做' },
+  dude: { partOfSpeech: 'n.', meaningZh: '老兄' },
+  eater: { partOfSpeech: 'n.', meaningZh: '吃東西的人' },
+  edible: { partOfSpeech: 'adj.', meaningZh: '可食用的' },
+  fat: { partOfSpeech: 'adj.', meaningZh: '胖的' },
+  father: { partOfSpeech: 'n.', meaningZh: '父親' },
+  feel: { partOfSpeech: 'v.', meaningZh: '感覺' },
+  feet: { partOfSpeech: 'n.', meaningZh: '腳（複數）' },
+  fell: { partOfSpeech: 'v.', meaningZh: '跌倒了' },
+  fig: { partOfSpeech: 'n.', meaningZh: '無花果' },
+  fit: { partOfSpeech: 'adj.', meaningZh: '健康的' },
+  fog: { partOfSpeech: 'n.', meaningZh: '霧' },
+  fool: { partOfSpeech: 'n.', meaningZh: '傻瓜' },
+  foot: { partOfSpeech: 'n.', meaningZh: '腳' },
+  full: { partOfSpeech: 'adj.', meaningZh: '滿的' },
+  god: { partOfSpeech: 'n.', meaningZh: '神' },
+  good: { partOfSpeech: 'adj.', meaningZh: '好的' },
+  head: { partOfSpeech: 'n.', meaningZh: '頭' },
+  heat: { partOfSpeech: 'n.', meaningZh: '熱' },
+  home: { partOfSpeech: 'n.', meaningZh: '家' },
+  hot: { partOfSpeech: 'adj.', meaningZh: '熱的' },
+  hut: { partOfSpeech: 'n.', meaningZh: '小屋' },
+  late: { partOfSpeech: 'adj.', meaningZh: '晚的' },
+  less: { partOfSpeech: 'det.', meaningZh: '較少的' },
+  look: { partOfSpeech: 'v.', meaningZh: '看' },
+  loose: { partOfSpeech: 'adj.', meaningZh: '鬆的' },
+  love: { partOfSpeech: 'n.', meaningZh: '愛' },
+  luck: { partOfSpeech: 'n.', meaningZh: '運氣' },
+  machine: { partOfSpeech: 'n.', meaningZh: '機器' },
+  many: { partOfSpeech: 'det.', meaningZh: '許多' },
+  map: { partOfSpeech: 'n.', meaningZh: '地圖' },
+  me: { partOfSpeech: 'pron.', meaningZh: '我' },
+  name: { partOfSpeech: 'n.', meaningZh: '名字' },
+  otter: { partOfSpeech: 'n.', meaningZh: '水獺' },
+  pat: { partOfSpeech: 'v.', meaningZh: '輕拍' },
+  pencil: { partOfSpeech: 'n.', meaningZh: '鉛筆' },
+  pet: { partOfSpeech: 'n.', meaningZh: '寵物' },
+  pit: { partOfSpeech: 'n.', meaningZh: '坑' },
+  pool: { partOfSpeech: 'n.', meaningZh: '游泳池' },
+  pot: { partOfSpeech: 'n.', meaningZh: '鍋子' },
+  pretty: { partOfSpeech: 'adj.', meaningZh: '漂亮的' },
+  problem: { partOfSpeech: 'n.', meaningZh: '問題' },
+  pull: { partOfSpeech: 'v.', meaningZh: '拉' },
+  put: { partOfSpeech: 'v.', meaningZh: '放' },
+  rule: { partOfSpeech: 'n.', meaningZh: '規則' },
+  sack: { partOfSpeech: 'n.', meaningZh: '麻布袋' },
+  sheep: { partOfSpeech: 'n.', meaningZh: '羊' },
+  ship: { partOfSpeech: 'n.', meaningZh: '船' },
+  sit: { partOfSpeech: 'v.', meaningZh: '坐' },
+  sock: { partOfSpeech: 'n.', meaningZh: '襪子' },
+  support: { partOfSpeech: 'v.', meaningZh: '支持' },
+  time: { partOfSpeech: 'n.', meaningZh: '時間' },
+  today: { partOfSpeech: 'adv.', meaningZh: '今天' },
+  took: { partOfSpeech: 'v.', meaningZh: '拿了' },
+  tuck: { partOfSpeech: 'v.', meaningZh: '塞入' },
+  use: { partOfSpeech: 'v.', meaningZh: '使用' },
+  village: { partOfSpeech: 'n.', meaningZh: '村莊' },
+  woman: { partOfSpeech: 'n.', meaningZh: '女人' },
+}
+
 type SoundMapLetter = keyof typeof SOUND_MAP
 const SOUND_MAP_LETTERS = Object.keys(SOUND_MAP) as SoundMapLetter[]
 
-const CONSONANT_PAIR = [
-  { sound: 'p', word: 'pat', ipa: '/pæt/' },
-  { sound: 'b', word: 'bat', ipa: '/bæt/' },
-] as const
+type ConsonantSound = { sound: string; word: string; ipa: string; partOfSpeech: string; meaningZh: string }
+type ConsonantPair = {
+  id: string
+  sounds: readonly [ConsonantSound, ConsonantSound]
+  noteZh: string
+  noteEn: string
+}
 
+const CONSONANT_PAIRS: readonly ConsonantPair[] = [
+  { id: 'p-b', sounds: [{ sound: 'p', word: 'pat', ipa: '/pæt/', partOfSpeech: 'v.', meaningZh: '輕拍' }, { sound: 'b', word: 'bat', ipa: '/bæt/', partOfSpeech: 'n.', meaningZh: '蝙蝠' }], noteZh: '只有開頭子音不同；/æ/ 和 /t/ 相同。', noteEn: 'Only the first consonant changes; /æ/ and /t/ stay the same.' },
+  { id: 't-d', sounds: [{ sound: 't', word: 'ten', ipa: '/tɛn/', partOfSpeech: 'num.', meaningZh: '十' }, { sound: 'd', word: 'den', ipa: '/dɛn/', partOfSpeech: 'n.', meaningZh: '獸穴' }], noteZh: '只有開頭子音不同；/ɛn/ 相同。', noteEn: 'Only the first consonant changes; /ɛn/ stays the same.' },
+  { id: 'k-g', sounds: [{ sound: 'k', word: 'coat', ipa: '/koʊt/', partOfSpeech: 'n.', meaningZh: '外套' }, { sound: 'g', word: 'goat', ipa: '/goʊt/', partOfSpeech: 'n.', meaningZh: '山羊' }], noteZh: '只有開頭子音不同；/oʊt/ 相同。', noteEn: 'Only the first consonant changes; /oʊt/ stays the same.' },
+  { id: 'f-v', sounds: [{ sound: 'f', word: 'fan', ipa: '/fæn/', partOfSpeech: 'n.', meaningZh: '電風扇' }, { sound: 'v', word: 'van', ipa: '/væn/', partOfSpeech: 'n.', meaningZh: '廂型車' }], noteZh: '只有開頭子音不同；/æn/ 相同。', noteEn: 'Only the first consonant changes; /æn/ stays the same.' },
+  { id: 'θ-ð', sounds: [{ sound: 'θ', word: 'teeth', ipa: '/tiːθ/', partOfSpeech: 'n.', meaningZh: '牙齒' }, { sound: 'ð', word: 'teethe', ipa: '/tiːð/', partOfSpeech: 'v.', meaningZh: '長牙' }], noteZh: '只有最後的子音不同；/tiː/ 相同。', noteEn: 'Only the final consonant changes; /tiː/ stays the same.' },
+  { id: 's-z', sounds: [{ sound: 's', word: 'sip', ipa: '/sɪp/', partOfSpeech: 'v.', meaningZh: '小口喝' }, { sound: 'z', word: 'zip', ipa: '/zɪp/', partOfSpeech: 'v.', meaningZh: '拉拉鍊' }], noteZh: '只有開頭子音不同；/ɪp/ 相同。', noteEn: 'Only the first consonant changes; /ɪp/ stays the same.' },
+  { id: 'ʃ-ʒ', sounds: [{ sound: 'ʃ', word: 'pressure', ipa: '/ˈprɛʃɚ/', partOfSpeech: 'n.', meaningZh: '壓力' }, { sound: 'ʒ', word: 'pleasure', ipa: '/ˈplɛʒɚ/', partOfSpeech: 'n.', meaningZh: '愉悅' }], noteZh: '聽字中的 /ʃ/ 與 /ʒ/；開頭的子音也不同。', noteEn: 'Listen for /ʃ/ and /ʒ/ inside the words; their opening consonants differ too.' },
+  { id: 'tʃ-dʒ', sounds: [{ sound: 'tʃ', word: 'cheap', ipa: '/tʃiːp/', partOfSpeech: 'adj.', meaningZh: '便宜的' }, { sound: 'dʒ', word: 'jeep', ipa: '/dʒiːp/', partOfSpeech: 'n.', meaningZh: '吉普車' }], noteZh: '只有開頭子音不同；/iːp/ 相同。', noteEn: 'Only the first consonant changes; /iːp/ stays the same.' },
+  { id: 'm-n', sounds: [{ sound: 'm', word: 'sum', ipa: '/sʌm/', partOfSpeech: 'n.', meaningZh: '總和' }, { sound: 'n', word: 'sun', ipa: '/sʌn/', partOfSpeech: 'n.', meaningZh: '太陽' }], noteZh: '只有最後的子音不同；/sʌ/ 相同。', noteEn: 'Only the final consonant changes; /sʌ/ stays the same.' },
+  { id: 'n-ŋ', sounds: [{ sound: 'n', word: 'sin', ipa: '/sɪn/', partOfSpeech: 'n.', meaningZh: '罪' }, { sound: 'ŋ', word: 'sing', ipa: '/sɪŋ/', partOfSpeech: 'v.', meaningZh: '唱歌' }], noteZh: '只有最後的子音不同；/sɪ/ 相同。', noteEn: 'Only the final consonant changes; /sɪ/ stays the same.' },
+  { id: 'l-r', sounds: [{ sound: 'l', word: 'light', ipa: '/laɪt/', partOfSpeech: 'n.', meaningZh: '光' }, { sound: 'r', word: 'right', ipa: '/raɪt/', partOfSpeech: 'adj.', meaningZh: '正確的' }], noteZh: '只有開頭子音不同；/aɪt/ 相同。', noteEn: 'Only the first consonant changes; /aɪt/ stays the same.' },
+  { id: 'v-w', sounds: [{ sound: 'v', word: 'vest', ipa: '/vɛst/', partOfSpeech: 'n.', meaningZh: '背心' }, { sound: 'w', word: 'west', ipa: '/wɛst/', partOfSpeech: 'n.', meaningZh: '西方' }], noteZh: '只有開頭子音不同；/ɛst/ 相同。', noteEn: 'Only the first consonant changes; /ɛst/ stays the same.' },
+  { id: 's-ʃ', sounds: [{ sound: 's', word: 'see', ipa: '/siː/', partOfSpeech: 'v.', meaningZh: '看見' }, { sound: 'ʃ', word: 'she', ipa: '/ʃiː/', partOfSpeech: 'pron.', meaningZh: '她' }], noteZh: '只有開頭子音不同；/iː/ 相同。', noteEn: 'Only the first consonant changes; /iː/ stays the same.' },
+  { id: 'ʃ-tʃ', sounds: [{ sound: 'ʃ', word: 'shop', ipa: '/ʃɑp/', partOfSpeech: 'n.', meaningZh: '商店' }, { sound: 'tʃ', word: 'chop', ipa: '/tʃɑp/', partOfSpeech: 'v.', meaningZh: '劈砍' }], noteZh: '只有開頭子音不同；/ɑp/ 相同。', noteEn: 'Only the first consonant changes; /ɑp/ stays the same.' },
+  { id: 'θ-t', sounds: [{ sound: 'θ', word: 'thin', ipa: '/θɪn/', partOfSpeech: 'adj.', meaningZh: '薄的' }, { sound: 't', word: 'tin', ipa: '/tɪn/', partOfSpeech: 'n.', meaningZh: '錫' }], noteZh: '只有開頭子音不同；/ɪn/ 相同。', noteEn: 'Only the first consonant changes; /ɪn/ stays the same.' },
+  { id: 'θ-s', sounds: [{ sound: 'θ', word: 'thin', ipa: '/θɪn/', partOfSpeech: 'adj.', meaningZh: '薄的' }, { sound: 's', word: 'sin', ipa: '/sɪn/', partOfSpeech: 'n.', meaningZh: '罪' }], noteZh: '只有開頭子音不同；/ɪn/ 相同。', noteEn: 'Only the first consonant changes; /ɪn/ stays the same.' },
+  { id: 'p-f', sounds: [{ sound: 'p', word: 'pat', ipa: '/pæt/', partOfSpeech: 'v.', meaningZh: '輕拍' }, { sound: 'f', word: 'fat', ipa: '/fæt/', partOfSpeech: 'adj.', meaningZh: '胖的' }], noteZh: '只有開頭子音不同；/æt/ 相同。', noteEn: 'Only the first consonant changes; /æt/ stays the same.' },
+  { id: 'r-w', sounds: [{ sound: 'r', word: 'right', ipa: '/raɪt/', partOfSpeech: 'adj.', meaningZh: '正確的' }, { sound: 'w', word: 'white', ipa: '/waɪt/', partOfSpeech: 'adj.', meaningZh: '白色的' }], noteZh: '只有開頭子音不同；/aɪt/ 相同。', noteEn: 'Only the first consonant changes; /aɪt/ stays the same.' },
+]
 const REPEATED_IPA_COLORS: Partial<Record<string, string>> = {
   'ɛ': '#B02BC5',
   'ɪ': '#1D5EFF',
@@ -130,6 +252,64 @@ type FreeUsage = {
 }
 
 const FREE_USAGE_KEY = 'ensound-free-usage'
+
+function DevAccessSwitch({
+  accessLevel,
+  setAccessLevel,
+}: {
+  accessLevel: 'free' | 'full'
+  setAccessLevel: (level: 'free' | 'full') => void
+}) {
+  return (
+    <div
+style={{
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  width: 'fit-content',
+  marginBottom: 8,
+  padding: '6px 9px',
+        borderRadius: 14,
+        background: 'white',
+        border: '1px solid #dbe5ff',
+        boxShadow: '0 4px 18px rgba(36, 64, 120, 0.12)',
+        fontSize: 12,
+      }}
+    >
+      <span>🧪 Dev Access</span>
+
+      <button
+        type="button"
+        onClick={() => setAccessLevel('free')}
+        style={{
+          border: 0,
+          borderRadius: 999,
+          padding: '5px 9px',
+          cursor: 'pointer',
+          background: accessLevel === 'free' ? '#5B8CFF' : '#eef2ff',
+          color: accessLevel === 'free' ? 'white' : '#36517f',
+        }}
+      >
+        FREE
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setAccessLevel('full')}
+        style={{
+          border: 0,
+          borderRadius: 999,
+          padding: '5px 9px',
+          cursor: 'pointer',
+          background: accessLevel === 'full' ? '#5B8CFF' : '#eef2ff',
+          color: accessLevel === 'full' ? 'white' : '#36517f',
+        }}
+      >
+        FULL
+      </button>
+    </div>
+  )
+}
 
 export default function App() {
 const [accessLevel, setAccessLevel] = useState<'free' | 'full'>('free')
@@ -182,8 +362,16 @@ const [paywallReason, setPaywallReason] = useState<PaywallReason>(null)
     if (saved === 'zh-TW' || saved === 'en') return saved
     return navigator.language.toLowerCase().startsWith('zh') ? 'zh-TW' : 'en'
   })
+  const [showVowelBasicsTranslations, setShowVowelBasicsTranslations] = useState(false)
   const isZh = uiLang === 'zh-TW'
   const t = (zh: string, en: string) => (isZh ? zh : en)
+
+  function VowelWordMeaning({ word, inline = false }: { word: string; inline?: boolean }) {
+    if (!isZh) return null
+    const support = VOWEL_WORD_SUPPORT[word.toLowerCase()]
+    if (!support) return null
+    return <span style={{ display: inline ? 'inline' : 'block', color: '#7d86aa', fontSize: 14, fontWeight: 400, lineHeight: 1.4 }}>{support.partOfSpeech} {support.meaningZh}</span>
+  }
 
   const isInAppBrowser = useMemo(() => {
     const ua = navigator.userAgent || ''
@@ -289,11 +477,15 @@ function renderPaywall() {
   const [screen, setScreen] = useState<'sentence' | 'vowel' | 'vowelBasics' | 'consonant' | 'contrast' | 'audioqa' | 'level2proto' | 'choose2'>('contrast')
   const [selectedSoundLetter, setSelectedSoundLetter] = useState<SoundMapLetter>('A')
   const [selectedSoundIndex, setSelectedSoundIndex] = useState(0)
-  const [consonantPhase, setConsonantPhase] = useState<'compare' | 'challenge'>('compare')
+  const [consonantPhase, setConsonantPhase] = useState<'compare' | 'challenge' | 'result'>('compare')
+  const [consonantPairIndex, setConsonantPairIndex] = useState(0)
+  const consonantPair = CONSONANT_PAIRS[consonantPairIndex]
+  const consonantSounds = consonantPair.sounds
   const [consonantLooping, setConsonantLooping] = useState(false)
   const [consonantPlayingWord, setConsonantPlayingWord] = useState<string | null>(null)
   const consonantLoopSessionRef = useRef(0)
   const [consonantQuestion, setConsonantQuestion] = useState(0)
+  const [consonantScore, setConsonantScore] = useState(0)
   const [consonantTarget, setConsonantTarget] = useState<0 | 1>(0)
   const [consonantListened, setConsonantListened] = useState(false)
   const [consonantAnswer, setConsonantAnswer] = useState<0 | 1 | null>(null)
@@ -319,6 +511,7 @@ function renderPaywall() {
   const [sentence, setSentence] = useState(DEFAULT_SENTENCE)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(5)
   const repeatTimerRef = useRef<number | null>(null)
+  const [isSentenceRepeating, setIsSentenceRepeating] = useState(false)
   const [pronunciation, setPronunciation] = useState<WordPronunciation | null>(null)
   const [pronunciationLoading, setPronunciationLoading] = useState(false)
   const [selectedPronunciationIndex, setSelectedPronunciationIndex] = useState(0)
@@ -384,6 +577,7 @@ function renderPaywall() {
       window.clearInterval(repeatTimerRef.current)
       repeatTimerRef.current = null
     }
+    setIsSentenceRepeating(false)
     window.speechSynthesis?.cancel()
   }
 
@@ -406,6 +600,10 @@ function renderPaywall() {
 
 function handleRepeat() {
   if (!selectedWord) return
+  if (repeatTimerRef.current !== null) {
+    stopRepeat()
+    return
+  }
 
 if (!tryUseRepeat()) return
 
@@ -414,6 +612,7 @@ if (!tryUseRepeat()) return
   repeatTimerRef.current = window.setInterval(() => {
     speakWord(selectedWord.spoken, 0.9)
   }, 1800)
+  setIsSentenceRepeating(true)
 }
 
   function highlightSoundMapLetter(word: string) {
@@ -505,7 +704,7 @@ if (!tryUseRepeat()) return
     setConsonantLooping(true)
     const playAt = (index: 0 | 1) => {
       if (consonantLoopSessionRef.current !== session) return
-      const item = CONSONANT_PAIR[index]
+      const item = consonantSounds[index]
       setConsonantPlayingWord(item.word)
       const utterance = new SpeechSynthesisUtterance(item.word)
       utterance.lang = 'en-US'
@@ -838,6 +1037,7 @@ function nextChallengeQuestion() {
                 <span className="qa-vowel">/{item.vowel}/</span>
                 <strong>{item.word.toUpperCase()}</strong>
                 <span>{item.ipa}</span>
+                <VowelWordMeaning word={item.word} />
                 <small>🔊 {t('播放','Listen')}</small>
               </button>
             ))}
@@ -1466,7 +1666,7 @@ function nextChallengeQuestion() {
                   <button key={item.word} className={`qa-word-card ${freeStage!==2 && choosePlayingWord===item.word?'playing':''}`}
                     onClick={()=>{stopChooseLoop();speakChoose(item.word)}}>
                     <span className="qa-vowel">/{item.vowel}/</span>
-                    <strong>{item.word.toUpperCase()}</strong><span>{item.ipa}</span><small>🔊 {t('播放','Listen')}</small>
+                    <strong>{item.word.toUpperCase()}</strong><span>{item.ipa}</span><VowelWordMeaning word={item.word} /><small>🔊 {t('播放','Listen')}</small>
                   </button>
                 ))}
               </div>
@@ -1699,6 +1899,17 @@ if (chooseQuestion >= 5) {
     { vowel:'uː', word:'pool', ipa:'/puːl/', frame:'/p_l/', contrast:['ʊ','uː'] },
     { vowel:'ɪ', word:'bit', ipa:'/bɪt/', frame:'/b_t/', contrast:['ɪ','iː'] },
     { vowel:'iː', word:'beat', ipa:'/biːt/', frame:'/b_t/', contrast:['ɪ','iː'] },
+
+    // Additional core vowels use short, recognizable contrasts where possible.
+    { vowel:'ɔ', word:'all', ipa:'/ɔl/', frame:'/_l/', contrast:['ɔ','aʊ'] },
+    { vowel:'aʊ', word:'owl', ipa:'/aʊl/', frame:'/_l/', contrast:['ɔ','aʊ'] },
+    { vowel:'ə', word:'about', ipa:'/əˈbaʊt/', frame:'schwa-initial', contrast:['ə','ʌ'] },
+    { vowel:'eɪ', word:'late', ipa:'/leɪt/', frame:'/l_t/', contrast:['eɪ','aɪ'] },
+    { vowel:'aɪ', word:'light', ipa:'/laɪt/', frame:'/l_t/', contrast:['eɪ','aɪ'] },
+    { vowel:'ɔɪ', word:'boy', ipa:'/bɔɪ/', frame:'/b_/', contrast:['ɔɪ','aɪ'] },
+    { vowel:'aɪ', word:'buy', ipa:'/baɪ/', frame:'/b_/', contrast:['ɔɪ','aɪ'] },
+    { vowel:'oʊ', word:'no', ipa:'/noʊ/', frame:'/n_/', contrast:['oʊ','aʊ'] },
+    { vowel:'aʊ', word:'now', ipa:'/naʊ/', frame:'/n_/', contrast:['oʊ','aʊ'] },
   ] as const
 
   function startDiagnostic(){
@@ -1741,7 +1952,7 @@ if (chooseQuestion >= 5) {
       <MainNav active="level2" />
           <ProductInfo />
 
-      {!diagStarted&&!done&&<div className="diagnostic-intro"><p className="eyebrow">{t('母音測驗 · 診斷','Vowel Test · Diagnostic')}</p><h1 className="contrast-title">{t('10 題隨機聽力測驗', '10 random listening questions')}</h1><p className="contrast-subtitle"></p><div className="diagnostic-frame">{t('8 個母音 · 10 題聽力測驗', '8 vowel sounds · 10 questions')}</div><button className="start-challenge-button" onClick={startDiagnostic}>{t('開始 10 題測驗 →', 'Start 10-Question Test →')}</button></div>}
+      {!diagStarted&&!done&&<div className="diagnostic-intro"><p className="eyebrow">{t('母音測驗 · 診斷','Vowel Test · Diagnostic')}</p><h1 className="contrast-title">{t('10 題隨機聽力測驗', '10 random listening questions')}</h1><p className="contrast-subtitle"></p><div className="diagnostic-frame">{t('15 個母音 · 10 題聽力測驗', '15 vowel sounds · 10 questions')}</div><button className="start-challenge-button" onClick={startDiagnostic}>{t('開始 10 題測驗 →', 'Start 10-Question Test →')}</button></div>}
 
       {paywallReason === 'questions' && renderPaywall()}
 
@@ -1939,6 +2150,7 @@ if (chooseQuestion >= 5) {
                       <span className="contrast-vowel">/{item.vowel}/</span>
                       <strong>{item.word}</strong>
                       <span className="contrast-ipa">{item.ipa}</span>
+                      <VowelWordMeaning word={item.word} />
                       <div className="learn-audio-actions">
                         <button onClick={() => {
                           stopContrastRepeat()
@@ -2080,7 +2292,7 @@ if (chooseQuestion >= 5) {
             <div className="level-result">
               <p className="eyebrow">{contrastStage.id} {t('完成','complete')} · {contrastStage.title}</p>
               <h1>{challengeScore} / 6</h1>
-              <p>{challengeScore >= 5 ? 'Excellent — your ear is separating /æ/ and /ɛ/.' :
+              <p>{challengeScore >= 5 ? t('太棒了！你已經能分辨 /æ/ 和 /ɛ/ 的差異。', 'Excellent — your ear is separating /æ/ and /ɛ/.') :
                 challengeScore >= 4
                   ? t('不錯，再練一輪可以讓兩個音的差異更清楚。', 'Clear — one more round can make the contrast stronger.')
                   : t('繼續比較這兩個音，再挑戰一次。', 'Keep comparing the pairs, then try again.')}</p>
@@ -2105,13 +2317,17 @@ if (chooseQuestion >= 5) {
   }
 
   if (screen === 'consonant') {
-    const target = CONSONANT_PAIR[consonantTarget]
+    const target = consonantSounds[consonantTarget]
     return (
       <main className="app-shell">
         <section className="app-card contrast-practice consonant-practice">
-          <header className="header">
-            <div>
-              <div className="brand-row">
+<header className="header">
+  <div>
+    <DevAccessSwitch
+      accessLevel={accessLevel}
+      setAccessLevel={setAccessLevel}
+    />
+    <div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
                 <div className="language-switch" aria-label="Language">
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
@@ -2130,28 +2346,47 @@ if (chooseQuestion >= 5) {
           <InAppBrowserNotice />
           <ProductInfo />
 
-          <p className="eyebrow">/p/ ↔ /b/</p>
+          <p className="eyebrow">/{consonantSounds[0].sound}/ ↔ /{consonantSounds[1].sound}/</p>
           <h1 className="contrast-title">{t('子音練習', 'Consonant Practice')}</h1>
           <p className="contrast-subtitle">{t('專注聆聽子音的差異。', 'Focus on the difference between consonant sounds.')}</p>
+          <div className="pair-tabs consonant-pair-tabs" role="group" aria-label={t('選擇子音組合', 'Choose a consonant pair')}>
+            {CONSONANT_PAIRS.map((pair, index) => (
+              <button key={pair.id} type="button" className={consonantPairIndex === index ? 'active' : ''}
+                aria-pressed={consonantPairIndex === index}
+                onClick={() => {
+                  if (index === consonantPairIndex) return
+                  stopConsonantLoop()
+                  setConsonantPairIndex(index)
+                  setConsonantPhase('compare')
+                  setConsonantQuestion(0)
+                  setConsonantScore(0)
+                  setConsonantListened(false)
+                  setConsonantAnswer(null)
+                }}>
+                /{pair.sounds[0].sound}/ ↔ /{pair.sounds[1].sound}/
+              </button>
+            ))}
+          </div>
 
           {consonantPhase === 'compare' ? (
             <>
               <div className="contrast-cards">
-                {CONSONANT_PAIR.map((item) => (
+                {consonantSounds.map((item) => (
                   <div className="contrast-card contrast-learn-card" key={item.sound}>
                     <span className="contrast-vowel">/{item.sound}/</span>
                     <strong>{item.word.toUpperCase()}</strong>
                     <span className="contrast-ipa">{item.ipa}</span>
+                    {isZh && <span style={{ color: '#7d86aa', fontSize: 15, lineHeight: 1.4 }}>{item.partOfSpeech} {item.meaningZh}</span>}
                     <div className="learn-audio-actions">
                       <button onClick={() => { stopConsonantLoop(); speakWord(item.word, 0.82) }}>🔊 {t('播放', 'Play')}</button>
                     </div>
                   </div>
                 ))}
               </div>
-              <p className="consonant-note">PAT ↔ BAT · {t('只有開頭子音不同；/æ/ 和 /t/ 相同。', 'Only the first consonant changes; /æ/ and /t/ stay the same.')}</p>
+              <p className="consonant-note">{consonantSounds[0].word.toUpperCase()} ↔ {consonantSounds[1].word.toUpperCase()} · {t(consonantPair.noteZh, consonantPair.noteEn)}</p>
               <div className="loop-control-panel compact">
                 <div className="loop-word-indicators">
-                  {CONSONANT_PAIR.map((item) => (
+                  {consonantSounds.map((item) => (
                     <span key={item.sound} className={consonantPlayingWord === item.word ? 'playing' : ''}>{item.word.toUpperCase()}</span>
                   ))}
                 </div>
@@ -2162,17 +2397,26 @@ if (chooseQuestion >= 5) {
               <button className="start-challenge" onClick={() => {
                 stopConsonantLoop()
                 setConsonantQuestion(0)
+                setConsonantScore(0)
                 setConsonantTarget(Math.random() < 0.5 ? 0 : 1)
                 setConsonantListened(false)
                 setConsonantAnswer(null)
                 setConsonantPhase('challenge')
-              }}>{t('開始小挑戰 →', 'Start Mini Challenge →')}</button>
+              }}>{t('開始挑戰 →', 'Start Challenge →')}</button>
               {paywallReason === 'repeat' && renderPaywall()}
             </>
-          ) : (
+          ) : consonantPhase === 'challenge' ? (
             <>
-              <p className="question-count">{t('第', 'Question')} {consonantQuestion + 1} / 2 {t('題', '')}</p>
+              <div className="challenge-topbar">
+                <p className="eyebrow">{t('子音練習 · 挑戰', 'Consonant Practice · Challenge')}</p>
+                <button className="challenge-exit" onClick={() => {
+                  setConsonantAnswer(null)
+                  setConsonantListened(false)
+                  setConsonantPhase('compare')
+                }}>{t('離開 ×', 'Exit ×')}</button>
+              </div>
               <h2 className="consonant-question">{t('你聽到哪個子音？', 'Which consonant do you hear?')}</h2>
+              <p className="question-count">{t('第', 'Question')} {consonantQuestion + 1} / 6 {t('題', '')}</p>
               <p className={`listen-instruction ${consonantListened ? 'done' : ''}`}>
                 {consonantListened ? t('現在選擇你聽到的子音。', 'Now choose the consonant you heard.') : t('先聽聲音', 'Listen first')}
               </p>
@@ -2181,16 +2425,26 @@ if (chooseQuestion >= 5) {
                 speakWord(target.word, 0.82)
               }}><span>🔊</span><strong>{consonantListened ? t('再播放一次', 'Play again') : t('先聽聲音', 'Listen first')}</strong></button>
               <div className="challenge-choices">
-                {CONSONANT_PAIR.map((item, index) => {
+                {consonantSounds.map((item, index) => {
                   const chosen = consonantAnswer === index
                   const correct = consonantAnswer !== null && consonantTarget === index
                   const wrong = chosen && !correct
                   return (
-                    <button key={item.sound} disabled={!consonantListened || consonantAnswer !== null}
-                      className={`${correct ? 'answer-correct' : wrong ? 'answer-wrong' : ''} ${!consonantListened ? 'locked' : ''}`}
-                      onClick={() => setConsonantAnswer(index as 0 | 1)}>
-                      /{item.sound}/
+                    <button key={item.sound} disabled={!consonantListened}
+                      className={`${correct ? 'answer-correct' : wrong ? 'answer-wrong' : ''} ${!consonantListened ? 'locked' : ''} ${consonantAnswer !== null ? 'answer-listenable' : ''}`}
+                      onClick={() => {
+                        if (consonantAnswer !== null) {
+                          speakWord(item.word, 0.82)
+                        } else {
+                          setConsonantAnswer(index as 0 | 1)
+                          if (index === consonantTarget) setConsonantScore((score) => score + 1)
+                        }
+                      }}>
+                      <span className="answer-vowel">/{item.sound}/{consonantAnswer !== null && <span className="answer-speaker">🔊</span>}</span>
                       {!consonantListened && <small>🔒 {t('先聽聲音', 'Listen first')}</small>}
+                      {correct && <small>✓ {t('正確', 'Correct sound')}</small>}
+                      {wrong && <small>✕ {t('你的選擇', 'Your choice')}</small>}
+                      {consonantAnswer !== null && !correct && !wrong && <small>{t('可點選聆聽', 'Tap to listen')}</small>}
                     </button>
                   )
                 })}
@@ -2199,24 +2453,45 @@ if (chooseQuestion >= 5) {
                 <div className={`challenge-feedback ${consonantAnswer === consonantTarget ? 'correct' : 'wrong'}`}>
                   <div className="feedback-symbol">{consonantAnswer === consonantTarget ? '✓' : '✕'}</div>
                   <strong className="feedback-title">{consonantAnswer === consonantTarget ? t('正確！', 'Correct!') : t('再試一次', 'Not quite')}</strong>
-                  {consonantAnswer !== consonantTarget && <p className="feedback-detail">{t('你選擇了', 'You chose')} /{CONSONANT_PAIR[consonantAnswer].sound}/ · {t('正確發音是', 'The sound was')} /{target.sound}/</p>}
+                  {consonantAnswer !== consonantTarget && <p className="feedback-detail">{t('你選擇了', 'You chose')} /{consonantSounds[consonantAnswer].sound}/ · {t('正確發音是', 'The sound was')} /{target.sound}/</p>}
                   <div className="feedback-word">{target.word.toUpperCase()} <span>{target.ipa}</span></div>
                   <div className="challenge-feedback-actions">
                     <button onClick={() => speakWord(target.word, 0.82)}>{t('🔊 再播放一次', '🔊 Hear again')}</button>
                     <button className="next-primary" onClick={() => {
-                      if (consonantQuestion === 1) {
-                        setConsonantPhase('compare')
+                      if (consonantQuestion >= 5) {
+                        setConsonantPhase('result')
                       } else {
-                        setConsonantQuestion(1)
-                        setConsonantTarget(consonantTarget === 0 ? 1 : 0)
+                        setConsonantQuestion((question) => question + 1)
+                        setConsonantTarget(Math.random() < 0.5 ? 0 : 1)
                         setConsonantListened(false)
                         setConsonantAnswer(null)
                       }
-                    }}>{consonantQuestion === 1 ? t('返回比較 →', 'Back to comparison →') : t('下一題 →', 'Next →')}</button>
+                    }}>{consonantQuestion >= 5 ? t('查看結果 →', 'See result →') : t('下一題 →', 'Next →')}</button>
                   </div>
                 </div>
               )}
             </>
+          ) : (
+            <div className="level-result">
+              <p className="eyebrow">{t('練習完成', 'Practice complete')} · /{consonantSounds[0].sound}/ ↔ /{consonantSounds[1].sound}/</p>
+              <h1>{consonantScore} / 6</h1>
+              <p>{consonantScore >= 5
+                ? t(`很棒！你已經能分辨 /${consonantSounds[0].sound}/ 和 /${consonantSounds[1].sound}/ 的差異。`, `Great! You can distinguish /${consonantSounds[0].sound}/ and /${consonantSounds[1].sound}/.`)
+                : consonantScore >= 4
+                  ? t(`不錯，再多聽幾次 /${consonantSounds[0].sound}/ 和 /${consonantSounds[1].sound}/，差異會更清楚。`, `Nice work. Listen to /${consonantSounds[0].sound}/ and /${consonantSounds[1].sound}/ a few more times to make the difference clearer.`)
+                  : t(`繼續比較 /${consonantSounds[0].sound}/ 和 /${consonantSounds[1].sound}/，再挑戰一次。`, `Keep comparing /${consonantSounds[0].sound}/ and /${consonantSounds[1].sound}/, then try the challenge again.`)}</p>
+              <div className="result-actions">
+                <button className="challenge-action-button" onClick={() => setConsonantPhase('compare')}>{t('← 再比較一次', '← Compare again')}</button>
+                <button className="challenge-action-button" onClick={() => {
+                  setConsonantQuestion(0)
+                  setConsonantScore(0)
+                  setConsonantTarget(Math.random() < 0.5 ? 0 : 1)
+                  setConsonantListened(false)
+                  setConsonantAnswer(null)
+                  setConsonantPhase('challenge')
+                }}>{t('重新挑戰', 'Retry Challenge')}</button>
+              </div>
+            </div>
           )}
         </section>
         <SiteFooter />
@@ -2262,7 +2537,14 @@ if (chooseQuestion >= 5) {
               'Explore the A, E, I, O, U sound map. Which sounds can you find more than once?')}
           </p>
 
-          <h2 className="vowel-basics-heading">{t('字母發音對照', 'Letter Sound Map')}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <h2 className="vowel-basics-heading">{t('字母發音對照', 'Letter Sound Map')}</h2>
+            {isZh && <button type="button" aria-pressed={showVowelBasicsTranslations}
+              onClick={() => setShowVowelBasicsTranslations((shown) => !shown)}
+              style={{ marginBottom: 12, border: '1px solid #dfe3f3', borderRadius: 999, padding: '5px 10px', background: '#f7f8ff', color: '#59658f', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+              翻譯：{showVowelBasicsTranslations ? '開啟' : '關閉'}
+            </button>}
+          </div>
           <p className="vowel-basics-hint">{t('找找看：哪些聲音重複出現？', 'Can you spot the sounds that repeat?')}</p>
           <div className="vowel-basics-map">
             {SOUND_MAP_LETTERS.map((letter) => (
@@ -2273,7 +2555,7 @@ if (chooseQuestion >= 5) {
                     <span className="vowel-basics-sound" key={sound.vowel}>
                       <span className="vowel-basics-ipa" style={REPEATED_IPA_COLORS[sound.vowel] ? { color: REPEATED_IPA_COLORS[sound.vowel] } : undefined}>
                         /{sound.vowel}/
-                      </span> <span className="vowel-basics-word">{sound.word}</span>
+                      </span> <span className="vowel-basics-word">{sound.word}{isZh && showVowelBasicsTranslations && <> <VowelWordMeaning word={sound.word} inline /></>}</span>
                     </span>
                   ))}
                 </div>
@@ -2285,11 +2567,11 @@ if (chooseQuestion >= 5) {
             <h2>{t('你發現了嗎？', 'Did you notice?')}</h2>
             <p className="vowel-basics-discovery">
               <strong style={{ color: REPEATED_IPA_COLORS['ə'] }}>/ə/</strong> {t('可以出現在 A、E、I、O、U。', 'can appear with A, E, I, O, and U.')}
-              <span className="vowel-basics-examples">about · problem · pencil · today · support</span>
+              <span className="vowel-basics-examples">{['about', 'problem', 'pencil', 'today', 'support'].map((word, index) => <span key={word}>{index > 0 && ' · '}{word} {isZh && <VowelWordMeaning word={word} inline />}</span>)}</span>
             </p>
             <p className="vowel-basics-discovery">
               <strong style={{ color: REPEATED_IPA_COLORS['ɪ'] }}>/ɪ/</strong> {t('也可以出現在 A、E、I。', 'can also appear with A, E, and I.')}
-              <span className="vowel-basics-examples">village · pretty · sit</span>
+              <span className="vowel-basics-examples">{['village', 'pretty', 'sit'].map((word, index) => <span key={word}>{index > 0 && ' · '}{word} {isZh && <VowelWordMeaning word={word} inline />}</span>)}</span>
             </p>
             <p className="vowel-basics-conclusion">{t('所以真正要學的，不只是 A / E / I / O / U，而是你實際聽到的母音。',
               'The goal is to recognize the vowel you actually hear, beyond learning the letters A / E / I / O / U.')}</p>
@@ -2375,6 +2657,7 @@ if (chooseQuestion >= 5) {
                 <span className="sound-map-symbol">/{sound.vowel}/</span>
                 <strong>{highlightSoundMapLetter(sound.word)}</strong>
                 <small>{sound.ipa}</small>
+                <VowelWordMeaning word={sound.word} />
                 <span className="sound-map-speaker">🔊</span>
               </button>
             ))}
@@ -2385,7 +2668,8 @@ if (chooseQuestion >= 5) {
             <div className="sound-focus-symbol">/{selectedSound.vowel}/</div>
             <div className="sound-focus-word">{highlightSoundMapLetter(selectedSound.word)}</div>
             <div className="sound-focus-ipa">{selectedSound.ipa}</div>
-            <p className="sound-focus-examples">{selectedSound.note}</p>
+            <VowelWordMeaning word={selectedSound.word} />
+            <p className="sound-focus-examples">{selectedSound.note.split(' · ').map((word, index) => <span key={word}>{index > 0 && ' · '}{word} {isZh && word !== selectedSound.word && <VowelWordMeaning word={word} inline />}</span>)}</p>
 
             <div className="sound-focus-actions">
               <button onClick={() => playSoundMapWord(selectedSoundIndex, 1)}>{t('🔊 播放','🔊 Play')}</button>
@@ -2394,7 +2678,7 @@ if (chooseQuestion >= 5) {
                 className={isASoundRepeating ? 'repeat-active' : ''}
                 onClick={toggleASoundRepeat}
               >
-                ∞ {isASoundRepeating ? t('停止','Stop') : t('重複','Repeat')}
+                {isASoundRepeating ? '■' : '∞'} {isASoundRepeating ? t('停止','Stop') : t('重複','Repeat')}
               </button>
             </div>
           </section>
@@ -2576,9 +2860,9 @@ if (chooseQuestion >= 5) {
               onClick={handleRepeat}
               disabled={!selectedWord}
             >
-              <span className="control-icon">&#8635;</span>
-              <strong>{t('重複', 'Repeat')}</strong>
-              <small>{t('循環','Loop')}</small>
+              <span className="control-icon">{isSentenceRepeating ? '■' : <>&#8635;</>}</span>
+              <strong>{isSentenceRepeating ? t('停止', 'Stop') : t('重複', 'Repeat')}</strong>
+              {!isSentenceRepeating && <small>{t('循環','Loop')}</small>}
             </button>
           </div>
 
