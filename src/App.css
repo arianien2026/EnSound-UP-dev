@@ -1488,6 +1488,12 @@ footer {
 .challenge-choices.diagnostic-guided-choices button {
   min-width: 0;
 }
+.consonant-test-card .challenge-choices.diagnostic-guided-choices {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.consonant-test-card .diagnostic-results .mistake-list > div {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 .vowel-test-card .challenge-topbar,
 .vowel-test-card .contrast-title,
 .vowel-test-card .question-count,
@@ -1498,6 +1504,9 @@ footer {
 @media (max-width: 680px) {
   .challenge-choices.diagnostic-guided-choices {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .consonant-test-card .challenge-choices.diagnostic-guided-choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
