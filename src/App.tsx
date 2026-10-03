@@ -12,15 +12,12 @@ type WordToken = {
 const DEFAULT_SENTENCE = 'I live in the countryside. I leave the countryside.'
 
 function tokenizeSentence(sentence: string): WordToken[] {
-  return sentence
-    .trim()
-    .split(/\s+/)
+  return (sentence.match(/[A-Za-z]+(?:['-][A-Za-z]+)*/g) ?? [])
     .map((raw, index) => ({
       raw,
-      spoken: raw.replace(/^[^A-Za-z'-]+|[^A-Za-z'-]+$/g, ''),
+      spoken: raw,
       index,
     }))
-    .filter((token) => token.spoken.length > 0)
 }
 
 function speakWord(word: string, rate: number) {
@@ -185,7 +182,7 @@ type ConsonantPair = {
   noteEn: string
 }
 
-type TestBankItem = { vowel: string; word: string; ipa: string; frame: string; contrast?: readonly string[] }
+type TestBankItem = { vowel: string; word: string; ipa: string; frame: string; contrast?: readonly string[]; diagnosticContrast?: string }
 type ConsonantTestQuestion = { pairIndex: number; targetIndex: 0 | 1; choices: string[] }
 
 function shuffled<T>(items: readonly T[]): T[] {
@@ -210,6 +207,19 @@ function vowelTestChoices(target: TestBankItem, bank: readonly TestBankItem[]): 
     if (choices.length < 4) add(vowel)
   })
   return shuffled(choices.slice(0, 4))
+}
+
+function weakContrastRecommendations(mistakes: Record<string, {count: number; chosen: Record<string, number>}>) {
+  const merged = new Map<string, {target: string; chosen: string; count: number}>()
+  for (const [target, detail] of Object.entries(mistakes)) {
+    for (const [chosen, count] of Object.entries(detail.chosen)) {
+      const key = [target, chosen].sort().join('|')
+      const existing = merged.get(key)
+      if (existing) existing.count += count
+      else merged.set(key, {target, chosen, count})
+    }
+  }
+  return [...merged.values()].sort((a, b) => b.count - a.count)
 }
 
 function consonantTestRound(): ConsonantTestQuestion[] {
@@ -540,7 +550,7 @@ function renderPaywall() {
   const [consonantTestAnswer, setConsonantTestAnswer] = useState<string | null>(null)
   const [consonantTestListened, setConsonantTestListened] = useState(false)
   const [consonantTestScore, setConsonantTestScore] = useState(0)
-  const [consonantTestMisses, setConsonantTestMisses] = useState<string[]>([])
+  const [consonantTestMisses, setConsonantTestMisses] = useState<number[]>([])
   const [contrastStageIndex, setContrastStageIndex] = useState(0)
   const [contrastPairIndex, setContrastPairIndex] = useState(0)
   const [contrastRepeatSide, setContrastRepeatSide] = useState<'left' | 'right' | null>(null)
@@ -634,10 +644,15 @@ function renderPaywall() {
     window.speechSynthesis?.cancel()
   }
 
+  useEffect(() => {
+    if (screen !== 'sentence' && repeatTimerRef.current !== null) stopRepeat()
+  }, [screen])
+
   function handleSentenceChange(value: string) {
     stopRepeat()
     setSentence(value)
-    setSelectedIndex(null)
+    const selectableWords = tokenizeSentence(value)
+    setSelectedIndex(selectableWords.length === 1 ? selectableWords[0].index : null)
   }
 
   function handleSelect(index: number) {
@@ -743,6 +758,16 @@ if (!tryUseRepeat()) return
     setConsonantLooping(false)
     setConsonantPlayingWord(null)
     window.speechSynthesis.cancel()
+  }
+
+  function selectConsonantPair(index: number) {
+    stopConsonantLoop()
+    setConsonantPairIndex(index)
+    setConsonantPhase('compare')
+    setConsonantQuestion(0)
+    setConsonantScore(0)
+    setConsonantListened(false)
+    setConsonantAnswer(null)
   }
 
   function toggleConsonantLoop() {
@@ -1442,7 +1467,7 @@ function nextChallengeQuestion() {
     )
   }
 
-  function MainNav({ active }: { active: 'sentence' | 'vowel' | 'vowelBasics' | 'consonant' | 'guided' | 'choose2' | 'lab' | 'level2' }) {
+  function MainNav({ active }: { active: 'sentence' | 'vowel' | 'vowelBasics' | 'consonant' | 'consonantTest' | 'guided' | 'choose2' | 'lab' | 'level2' }) {
     return (
     <div className="mode-switch">
       <button className={`mode-button ${active === 'sentence' ? 'active' : ''}`} onClick={() => {
@@ -1456,16 +1481,19 @@ function nextChallengeQuestion() {
       }}>{t('母音核心說明', 'Vowel Basics')}</button>
       <button className={`mode-button ${active === 'guided' ? 'active' : ''}`} onClick={() => {
         stopChooseLoop(); stopQaLoop(); stopL2Loop(); setContrastPhase('learn'); setScreen('contrast')
-      }}>{t('音標練習導引', 'Guided')}</button>
+      }}>{t('母音練習導引', 'Vowel Guided Practice')}</button>
       <button className={`mode-button ${active === 'choose2' ? 'active' : ''}`} onClick={() => {
         stopQaLoop(); stopL2Loop(); stopContrastRepeat(); stopASoundRepeat(); setChoosePhase('compare'); setScreen('choose2')
-      }}>{t('音標練習：自由選 2 音', 'Choose 2')}</button>
+      }}>{t('母音練習：自由選 2 音', 'Vowel Choose 2')}</button>
       <button className={`mode-button ${active === 'level2' ? 'active' : ''}`} onClick={() => {
         stopChooseLoop(); stopQaLoop(); stopContrastRepeat(); stopASoundRepeat(); setL2Phase('learn'); setScreen('level2proto')
       }}>{t('母音測驗', 'Vowel Test')}</button>
       <button className={`mode-button ${active === 'consonant' ? 'active' : ''}`} onClick={() => {
         stopChooseLoop(); stopQaLoop(); stopL2Loop(); stopContrastRepeat(); stopASoundRepeat(); setConsonantPhase('compare'); setScreen('consonant')
       }}>{t('子音練習', 'Consonant Practice')}</button>
+      <button className={`mode-button ${active === 'consonantTest' ? 'active' : ''}`} onClick={() => {
+        stopChooseLoop(); stopQaLoop(); stopL2Loop(); stopContrastRepeat(); stopASoundRepeat(); stopConsonantLoop(); setConsonantTestQuestions([]); setPaywallReason(null); setScreen('consonantTest')
+      }}>{t('子音測驗', 'Consonant Test')}</button>
     </div>
     )
   }
@@ -1583,9 +1611,22 @@ function nextChallengeQuestion() {
       { left:{vowel:'uː',word:'boot',ipa:'/buːt/'}, right:{vowel:'iː',word:'beat',ipa:'/biːt/'} },
       { left:{vowel:'uː',word:'boon',ipa:'/buːn/'}, right:{vowel:'iː',word:'bean',ipa:'/biːn/'} },
     ]},
+    // Controlled single-frame contrasts already used in the comprehensive test.
+    { vowels: ['ɔ','aʊ'] as const, pairs: [
+      { left:{vowel:'ɔ',word:'all',ipa:'/ɔl/'}, right:{vowel:'aʊ',word:'owl',ipa:'/aʊl/'} },
+    ]},
+    { vowels: ['eɪ','aɪ'] as const, pairs: [
+      { left:{vowel:'eɪ',word:'late',ipa:'/leɪt/'}, right:{vowel:'aɪ',word:'light',ipa:'/laɪt/'} },
+    ]},
+    { vowels: ['ɔɪ','aɪ'] as const, pairs: [
+      { left:{vowel:'ɔɪ',word:'boy',ipa:'/bɔɪ/'}, right:{vowel:'aɪ',word:'buy',ipa:'/baɪ/'} },
+    ]},
+    { vowels: ['oʊ','aʊ'] as const, pairs: [
+      { left:{vowel:'oʊ',word:'no',ipa:'/noʊ/'}, right:{vowel:'aʊ',word:'now',ipa:'/naʊ/'} },
+    ]},
   ]
 
-  const CHOOSE2_VOWELS = ['æ','ɛ','ɪ','ʌ','ɑ','ʊ','uː','iː'] as const
+  const CHOOSE2_VOWELS = ['æ','ɛ','ɪ','ʌ','ɑ','ʊ','uː','iː','ɔ','eɪ','aɪ','ɔɪ','oʊ','aʊ'] as const
 
   function findChooseLibrary() {
     return CHOOSE2_LIBRARY.find(x =>
@@ -1663,9 +1704,7 @@ function nextChallengeQuestion() {
           <p className="selection-line">{t('已選擇：','Selected: ')}<strong>{freeChosen.map(v=>`/${v}/`).join(' + ')}</strong></p>
 
           {Object.keys(diagMistakes).length > 0 && (() => {
-            const recommendations = (Object.entries(diagMistakes) as [string,{count:number,chosen:Record<string,number>}][])
-              .flatMap(([target, detail]) => (Object.entries(detail.chosen) as [string,number][]).map(([chosen, count]) => ({ target, chosen, count })))
-              .sort((a,b) => b.count - a.count)
+            const recommendations = weakContrastRecommendations(diagMistakes)
             return (
               <section className="needs-practice-board">
                 <div className="needs-practice-heading">
@@ -1677,7 +1716,7 @@ function nextChallengeQuestion() {
                   {recommendations.map(({target,chosen,count}) => {
                     const ready = CHOOSE2_LIBRARY.some(x => x.vowels.includes(target as never) && x.vowels.includes(chosen as never))
                     return <div className="practice-recommendation" key={`${target}-${chosen}`}>
-                      <div><strong>/{target}/ ↔ /{chosen}/</strong><small>{t('將','Mistook')} /{target}/ {t('誤選為','as')} /{chosen}/ ×{count}</small></div>
+                      <div><strong>/{target}/ ↔ /{chosen}/</strong><small>{t('建議對比','Practice contrast')} /{target}/ ↔ /{chosen}/ ×{count}</small></div>
                       <button disabled={!ready} onClick={() => {
                         if (!ready) return
                         stopChooseLoop(); setFreeChosen([target,chosen]); setFreeStage(0); setChoosePhase('compare')
@@ -1701,8 +1740,10 @@ function nextChallengeQuestion() {
               <div className="level-stage-tabs">
                 {[
                   {id:'1A', title:`${lib.pairs[0].left.word.toUpperCase()} vs ${lib.pairs[0].right.word.toUpperCase()}`},
-                  {id:'1B', title:`${lib.pairs[1].left.word.toUpperCase()} vs ${lib.pairs[1].right.word.toUpperCase()}`},
-                  {id:'1C', title:'Mixed Frames'},
+                  ...(lib.pairs.length > 1 ? [
+                    {id:'1B', title:`${lib.pairs[1].left.word.toUpperCase()} vs ${lib.pairs[1].right.word.toUpperCase()}`},
+                    {id:'1C', title:'Mixed Frames'},
+                  ] : []),
                 ].map((stage,i) => (
                   <button key={stage.id} className={freeStage===i?'active':''} onClick={()=>{stopChooseLoop();setFreeStage(i as 0|1|2)}}>
                     <strong>{stage.id}</strong><span>{stage.id === '1C' ? t('混合練習','Mixed Frames') : stage.title}</span>
@@ -1926,11 +1967,11 @@ if (chooseQuestion >= 5) {
 
   const TEST_BANK: readonly TestBankItem[] = [
     // /b_t/ frame — five vowels
-    { vowel:'æ', word:'bat', ipa:'/bæt/', frame:'/b_t/' },
-    { vowel:'ɛ', word:'bet', ipa:'/bɛt/', frame:'/b_t/' },
-    { vowel:'ɪ', word:'bit', ipa:'/bɪt/', frame:'/b_t/' },
-    { vowel:'ʌ', word:'but', ipa:'/bʌt/', frame:'/b_t/' },
-    { vowel:'ɑ', word:'bot', ipa:'/bɑt/', frame:'/b_t/' },
+    { vowel:'æ', word:'bat', ipa:'/bæt/', frame:'/b_t/', diagnosticContrast:'ɛ' },
+    { vowel:'ɛ', word:'bet', ipa:'/bɛt/', frame:'/b_t/', diagnosticContrast:'ɪ' },
+    { vowel:'ɪ', word:'bit', ipa:'/bɪt/', frame:'/b_t/', diagnosticContrast:'ɛ' },
+    { vowel:'ʌ', word:'but', ipa:'/bʌt/', frame:'/b_t/', diagnosticContrast:'ɑ' },
+    { vowel:'ɑ', word:'bot', ipa:'/bɑt/', frame:'/b_t/', diagnosticContrast:'ʌ' },
 
     // Additional controlled contrasts for the three vowels that do not fit cleanly
     // into the same /b_t/ lexical frame.
@@ -1987,7 +2028,8 @@ if (chooseQuestion >= 5) {
   if (screen === 'level2proto') {
     const done=diagQuestion>=10
     const targetItem=TEST_BANK[diagTarget]
-    const mistakes=(Object.entries(diagMistakes) as [string,{count:number,chosen:Record<string,number>}][]).sort((a,b)=>b[1].count-a[1].count)
+    const diagAnswerCorrect=diagAnswer!==null&&TEST_BANK[diagAnswer]?.vowel===targetItem.vowel
+    const recommendations=weakContrastRecommendations(diagMistakes)
     return <main className="app-shell"><section className="app-card vowel-test-card">
       <header className="header"><div><div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
@@ -2064,10 +2106,13 @@ if (chooseQuestion >= 5) {
                 }
                 setDiagAnswer(selectedIndex)
                 if(item.vowel===targetItem.vowel)setDiagScore(s=>s+1)
-                else setDiagMistakes(prev=>{
-                  const old=prev[targetItem.vowel]||{count:0,chosen:{}}
-                  return {...prev,[targetItem.vowel]:{count:old.count+1,chosen:{...old.chosen,[item.vowel]:(old.chosen[item.vowel]||0)+1}}}
-                })
+                else {
+                  const practiceVowel = targetItem.contrast?.find((vowel) => vowel !== targetItem.vowel) ?? targetItem.diagnosticContrast
+                  if (practiceVowel) setDiagMistakes(prev=>{
+                    const old=prev[targetItem.vowel]||{count:0,chosen:{}}
+                    return {...prev,[targetItem.vowel]:{count:old.count+1,chosen:{...old.chosen,[practiceVowel]:(old.chosen[practiceVowel]||0)+1}}}
+                  })
+                }
               }}
             >
               <span className="answer-vowel">/{item.vowel}/{answered&&<span className="answer-speaker"> 🔊</span>}</span>
@@ -2079,17 +2124,17 @@ if (chooseQuestion >= 5) {
           })}
         </div>
 
-        {diagAnswer!==null&&<div className={`challenge-feedback ${diagAnswer===diagTarget?'correct':'wrong'}`}>
-          <div className="feedback-symbol">{diagAnswer===diagTarget?'✓':'✕'}</div>
-          <strong className="feedback-title">{diagAnswer===diagTarget?t('正確！',t('正確！','Correct!')):t('再試一次',t('再試一次','Not quite'))}</strong>
-          {diagAnswer!==diagTarget&&<p className="feedback-detail">
+        {diagAnswer!==null&&<div className={`challenge-feedback ${diagAnswerCorrect?'correct':'wrong'}`}>
+          <div className="feedback-symbol">{diagAnswerCorrect?'✓':'✕'}</div>
+          <strong className="feedback-title">{diagAnswerCorrect?t('正確！',t('正確！','Correct!')):t('再試一次',t('再試一次','Not quite'))}</strong>
+          {!diagAnswerCorrect&&<p className="feedback-detail">
             {t('你選擇了','You chose')} /{TEST_BANK[diagAnswer].vowel}/ · {t('正確發音是','The sound was')} <b>/{targetItem.vowel}/</b>
           </p>}
           <div className="feedback-word">{targetItem.word} <span>{targetItem.ipa}</span></div>
           <div className="challenge-feedback-actions">
             <button onClick={()=>playL2Word(targetItem.word)}>{t('🔊 再播放一次','🔊 Hear again')}</button>
             <button className="next-primary" onClick={()=>{
-              if (!isFull && freeUsage.questions >= 3) {
+              if (diagQuestion !== 9 && !isFull && freeUsage.questions >= 3) {
                 setPaywallReason('questions')
                 setDiagStarted(false)
                 setDiagAnswer(null)
@@ -2110,12 +2155,12 @@ if (chooseQuestion >= 5) {
           </div>
         </div>}
       </>}
-      {done&&<div className="diagnostic-results"><p className="eyebrow">{t('測驗完成','Diagnostic complete')}</p><h1>{diagScore} / 10</h1>{mistakes.length===0?<p>{t('這一輪沒有偵測到需要特別加強的母音。','No weak vowel was detected in this round.')}</p>:<><h2>{t('需要加強', 'Needs Practice')}</h2><div className="mistake-list">{mistakes.map(([v,d])=><div key={v}><strong>/{v}/</strong><span>{t('答錯','Missed')} {d.count}×</span><small>{t('誤選為','Chosen as')} {(Object.entries(d.chosen) as [string,number][]).map(([x,n])=>`/${x}/ ×${n}`).join(' · ')}</small></div>)}</div>
-        <button className="start-challenge-button" onClick={()=>{
-          const first=mistakes.flatMap(([target,d])=>(Object.entries(d.chosen) as [string,number][]).map(([chosen,count])=>({target,chosen,count}))).sort((a,b)=>b.count-a.count).find(x=>CHOOSE2_LIBRARY.some(lib=>lib.vowels.includes(x.target as never)&&lib.vowels.includes(x.chosen as never)))
+      {done&&<div className="diagnostic-results"><p className="eyebrow">{t('測驗完成','Diagnostic complete')}</p><h1>{diagScore} / 10</h1>{recommendations.length===0?<p>{t('這一輪沒有偵測到需要特別加強的母音。','No weak vowel was detected in this round.')}</p>:<><h2>{t('需要加強', 'Needs Practice')}</h2><div className="mistake-list">{recommendations.map(({target,chosen,count})=><div key={`${target}-${chosen}`}><strong>/{target}/ ↔ /{chosen}/</strong><span>{t('答錯','Missed')} {count}×</span></div>)}</div>
+        {recommendations.some(x=>CHOOSE2_LIBRARY.some(lib=>lib.vowels.includes(x.target as never)&&lib.vowels.includes(x.chosen as never)))&&<button className="start-challenge-button" onClick={()=>{
+          const first=recommendations.find(x=>CHOOSE2_LIBRARY.some(lib=>lib.vowels.includes(x.target as never)&&lib.vowels.includes(x.chosen as never)))
           if(first){setFreeChosen([first.target,first.chosen]);setFreeStage(0);setChoosePhase('compare');setScreen('choose2')}
           else setScreen('choose2')
-        }}>{t('練習較弱的母音 →','Practice weak sounds →')}</button></>}<button className="secondary-test-button" onClick={startDiagnostic}>{t('再測 10 題 →','Try another 10 →')}</button></div>}
+        }}>{t('練習較弱的母音 →','Practice weak sounds →')}</button>}</>}<button className="secondary-test-button" onClick={startDiagnostic}>{t('再測 10 題 →','Try another 10 →')}</button></div>}
     </section><SiteFooter /></main>
   }
 
@@ -2386,7 +2431,7 @@ if (chooseQuestion >= 5) {
           <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
         </div>
       </div><p className="tagline">{t('聆聽並辨認子音。', 'Listen and identify consonants.')}</p></div></header>
-      <MainNav active="consonant" />
+      <MainNav active="consonantTest" />
       {consonantTestQuestions.length === 0 && <div className="diagnostic-intro">
         <p className="eyebrow">{t('子音綜合測驗', 'Consonant Comprehensive Test')}</p>
         <h1 className="contrast-title">{t('10 題混合聽力測驗', '10 mixed listening questions')}</h1>
@@ -2397,7 +2442,7 @@ if (chooseQuestion >= 5) {
       {question && !done && target && pair && <>
         <div className="challenge-topbar">
           <p className="eyebrow">{t('子音綜合測驗', 'Consonant Comprehensive Test')}</p>
-          <button className="challenge-exit" onClick={() => { setConsonantTestQuestions([]); setScreen('consonant') }}>{t('離開 ×', 'Exit ×')}</button>
+          <button className="challenge-exit" onClick={() => { setConsonantTestQuestions([]); setConsonantPhase('compare'); setScreen('consonant') }}>{t('離開 ×', 'Exit ×')}</button>
         </div>
         <h1 className="contrast-title">{t('你聽到哪個子音？', 'Which consonant do you hear?')}</h1>
         <p className="question-count">{t('第', 'Question')} {consonantTestIndex + 1} / 10 {t('題', '')}</p>
@@ -2419,7 +2464,7 @@ if (chooseQuestion >= 5) {
                 setConsonantTestAnswer(sound)
                 if (!isFull) setFreeUsage((current) => ({ ...current, questions: current.questions + 1 }))
                 if (sound === target.sound) setConsonantTestScore((score) => score + 1)
-                else setConsonantTestMisses((misses) => [...misses, `/${pair.sounds[0].sound}/ ↔ /${pair.sounds[1].sound}/`])
+                else setConsonantTestMisses((misses) => [...misses, question.pairIndex])
               }}>
               <span className="answer-vowel">/{sound}/</span>
               {!consonantTestListened && <small>🔒 {t('先聽聲音', 'Listen first')}</small>}
@@ -2436,7 +2481,7 @@ if (chooseQuestion >= 5) {
           <div className="challenge-feedback-actions">
             <button onClick={() => speakWord(target.word, 0.82)}>{t('🔊 再播放一次', '🔊 Hear again')}</button>
             <button className="next-primary" onClick={() => {
-              if (!isFull && freeUsage.questions >= 3) {
+              if (consonantTestIndex !== 9 && !isFull && freeUsage.questions >= 3) {
                 setPaywallReason('questions'); setConsonantTestQuestions([]); return
               }
               setConsonantTestIndex((index) => index + 1)
@@ -2450,10 +2495,22 @@ if (chooseQuestion >= 5) {
         <p className="eyebrow">{t('測驗完成', 'Test complete')}</p>
         <h1>{consonantTestScore} / 10</h1>
         {consonantTestMisses.length > 0 ? <><h2>{t('需要加強的對比', 'Contrasts to review')}</h2>
-          <div className="mistake-list">{[...new Set(consonantTestMisses)].map((contrast) => <div key={contrast}><strong>{contrast}</strong><span>{t('答錯', 'Missed')} {consonantTestMisses.filter((miss) => miss === contrast).length}×</span></div>)}</div></>
+          <div className="mistake-list">{[...new Set(consonantTestMisses)].map((pairIndex) => {
+            const weakPair = CONSONANT_PAIRS[pairIndex]
+            return <div key={weakPair.id}>
+              <strong>/{weakPair.sounds[0].sound}/ ↔ /{weakPair.sounds[1].sound}/</strong>
+              <span>{t('答錯', 'Missed')} {consonantTestMisses.filter((miss) => miss === pairIndex).length}×</span>
+              <button type="button" onClick={() => {
+                selectConsonantPair(pairIndex)
+                setConsonantTestQuestions([])
+                setScreen('consonant')
+              }}>{t('開始練習', 'Practice')}</button>
+            </div>
+          })}</div></>
           : <p>{t('這一輪沒有答錯的子音對比。', 'No missed consonant contrasts this round.')}</p>}
-        <button className="start-challenge-button" onClick={() => { setConsonantTestQuestions([]); setScreen('consonant') }}>{t('← 返回子音練習', '← Consonant Practice')}</button>
+        <button className="start-challenge-button" onClick={() => { setConsonantTestQuestions([]); setConsonantPhase('compare'); setScreen('consonant') }}>{t('← 返回子音練習', '← Consonant Practice')}</button>
         <button className="secondary-test-button" onClick={startConsonantTest}>{t('再測 10 題 →', 'Retry Test →')}</button>
+        {paywallReason === 'questions' && renderPaywall()}
       </div>}
     </section><SiteFooter /></main>
   }
@@ -2497,13 +2554,7 @@ if (chooseQuestion >= 5) {
                 aria-pressed={consonantPairIndex === index}
                 onClick={() => {
                   if (index === consonantPairIndex) return
-                  stopConsonantLoop()
-                  setConsonantPairIndex(index)
-                  setConsonantPhase('compare')
-                  setConsonantQuestion(0)
-                  setConsonantScore(0)
-                  setConsonantListened(false)
-                  setConsonantAnswer(null)
+                  selectConsonantPair(index)
                 }}>
                 /{pair.sounds[0].sound}/ ↔ /{pair.sounds[1].sound}/
               </button>
@@ -2923,11 +2974,6 @@ if (chooseQuestion >= 5) {
               ) : primaryPronunciation ? (
                 <>
                   <p className="ipa">{primaryPronunciation.ipa}</p>
-                  {primaryPronunciation.primaryVowel && (
-                    <p className="primary-vowel">
-                      {t('主要母音：','Primary vowel: ')} /{primaryPronunciation.primaryVowel}/
-                    </p>
-                  )}
                   {pronunciation && pronunciation.pronunciations.length > 1 && (
                     <div className="variant-selector">
                       <button

@@ -1492,7 +1492,15 @@ footer {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .consonant-test-card .diagnostic-results .mistake-list > div {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.consonant-test-card .diagnostic-results .mistake-list button {
+  border:0; border-radius:11px; padding:8px 10px; background:#6557df;
+  color:#fff; font:inherit; font-weight:800; cursor:pointer;
+}
+@media (max-width: 450px) {
+  .consonant-test-card .diagnostic-results .mistake-list > div { grid-template-columns:minmax(0, 1fr) auto; }
+  .consonant-test-card .diagnostic-results .mistake-list button { grid-column:1 / -1; justify-self:start; }
 }
 .vowel-test-card .challenge-topbar,
 .vowel-test-card .contrast-title,

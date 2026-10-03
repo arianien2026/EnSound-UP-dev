@@ -16,11 +16,11 @@ const ARPABET_TO_IPA: Record<string, string> = {
   ER: 'ɝ',
   EY: 'eɪ',
   IH: 'ɪ',
-  IY: 'i',
+  IY: 'iː',
   OW: 'oʊ',
   OY: 'ɔɪ',
   UH: 'ʊ',
-  UW: 'u',
+  UW: 'uː',
 
   B: 'b',
   CH: 'tʃ',
@@ -36,7 +36,7 @@ const ARPABET_TO_IPA: Record<string, string> = {
   N: 'n',
   NG: 'ŋ',
   P: 'p',
-  R: 'ɹ',
+  R: 'r',
   S: 's',
   SH: 'ʃ',
   T: 't',
@@ -138,37 +138,9 @@ function getPrimaryVowel(vowels: VowelPhoneme[]): string | null {
 }
 
 function createLearnerIpa(phonemes: string[]): string {
-  const parsed = phonemes.map(parsePhoneme)
-
-  const vowelCount = parsed.filter((phoneme) =>
-    VOWELS.has(phoneme.base),
-  ).length
-
-  return (
-    '/' +
-    parsed
-      .map((phoneme) => {
-        const ipa = phonemeToIpa(phoneme)
-
-        // Do not display a stress mark for ordinary one-vowel words
-        // such as cat, cup, or hot.
-        if (vowelCount <= 1) {
-          return ipa
-        }
-
-        if (phoneme.stress === 1) {
-          return `ˈ${ipa}`
-        }
-
-        if (phoneme.stress === 2) {
-          return `ˌ${ipa}`
-        }
-
-        return ipa
-      })
-      .join('') +
-    '/'
-  )
+  return '/' + phonemes.map((phoneme) =>
+    phonemeToIpa(parsePhoneme(phoneme)),
+  ).join('') + '/'
 }
 
 export function convertCmudictPronunciation(
