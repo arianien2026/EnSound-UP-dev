@@ -2,10 +2,12 @@ from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.orders import router as orders_router
 from app.database import get_engine
 
 
 app = FastAPI()
+app.include_router(orders_router)
 
 
 @app.get("/health")

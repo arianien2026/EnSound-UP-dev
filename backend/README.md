@@ -1,6 +1,6 @@
 # EnSound UP payment backend skeleton
 
-This separate FastAPI service exposes `GET /health` and `GET /health/db`. It does not process payments or grant access. Render PostgreSQL is the planned authoritative store. The first migration creates the `orders` table; no order API or payment flow exists yet.
+This separate FastAPI service exposes `GET /health`, `GET /health/db`, and `POST /orders`. It does not process payments or grant access. Render PostgreSQL is the planned authoritative store. The first migration creates the `orders` table.
 
 ## Run locally (Windows PowerShell)
 
@@ -34,6 +34,21 @@ With PostgreSQL reachable, visit `http://127.0.0.1:8000/health/db`. It runs `SEL
 ```
 
 If the variable is absent or the database cannot be reached, `/health/db` returns HTTP 503 with only `{"detail":"Database unavailable"}`. It never returns the connection string or a raw database error; `/health` remains available.
+
+## Pending orders (no checkout yet)
+
+After applying the `orders` migration, send only the entitlement email:
+
+```powershell
+$body = @{ email = 'learner@example.com' } | ConvertTo-Json
+Invoke-RestMethod -Uri 'http://127.0.0.1:8000/orders' -Method Post -ContentType 'application/json' -Body $body
+```
+
+Successful creation returns HTTP 201 with `order_id`, `entitlement_email`, `product_code`, `amount`, `currency`, `pricing_code`, `status` (`pending`), `created_at`, and `expires_at`. The backend fixes the product to `ensound_up_web_full_access`, prices in TWD using its own UTC clock, and expires an unpaid pending order two hours after creation. The email is checked for plausible structure, surrounding spaces are trimmed, and its domain is normalized; the mailbox portion, including dots and plus addressing, is preserved. Additional request fields such as amount, status, or product are rejected. Invalid input returns HTTP 422. Missing/unavailable database returns HTTP 503 without exposing credentials or SQL errors; no order is returned. This response does **not** grant Full Access.
+
+Regular price is NT$199 (`regular`). To enable NT$99 (`launch_promo`), set both `LAUNCH_PROMO_START_AT` and `LAUNCH_PROMO_END_AT` in the **backend environment** to timezone-aware ISO 8601 timestamps exactly seven days apart. The interval includes the start and excludes the end. Missing, malformed, naive, reversed, or non-seven-day configuration safely uses NT$199. `.env.example` lists placeholder names only; the app does not automatically load it. Set and verify the real launch dates operationally; never take pricing from the browser.
+
+For local automated checks, from `backend/` run `.\.venv\Scripts\python.exe -m unittest discover -s tests -v` in PowerShell. A successful persistence test requires a real **Development** PostgreSQL `DATABASE_URL`; mocked tests do not prove that a database commit worked. Repeated POST requests may create separate pending orders at this stage. Duplicate-submit/idempotency protection is required before Production payment initiation; this endpoint does not charge money.
 
 ## Migrations
 
