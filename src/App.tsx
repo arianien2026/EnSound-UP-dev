@@ -1480,7 +1480,7 @@ function nextChallengeQuestion() {
         stopChooseLoop(); stopQaLoop(); stopL2Loop(); stopContrastRepeat(); stopASoundRepeat(); setScreen('vowelBasics')
       }}>{t('母音核心說明', 'Vowel Basics')}</button>
       <button className={`mode-button ${active === 'guided' ? 'active' : ''}`} onClick={() => {
-        stopChooseLoop(); stopQaLoop(); stopL2Loop(); setContrastPhase('learn'); setScreen('contrast')
+        stopChooseLoop(); stopQaLoop(); stopL2Loop(); stopASoundRepeat(); setContrastPhase('learn'); setScreen('contrast')
       }}>{t('母音練習導引', 'Vowel Guided Practice')}</button>
       <button className={`mode-button ${active === 'choose2' ? 'active' : ''}`} onClick={() => {
         stopQaLoop(); stopL2Loop(); stopContrastRepeat(); stopASoundRepeat(); setChoosePhase('compare'); setScreen('choose2')
