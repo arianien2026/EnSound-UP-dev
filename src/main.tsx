@@ -6,7 +6,7 @@ import './App.css'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
 <div className="development-build-bar">
-  🧪 EnSound UP · Development · Paid-MVP Consonant-1B
+  🧪 EnSound UP · Development
 </div>
     <App />
   </StrictMode>,

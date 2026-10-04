@@ -939,13 +939,13 @@ function answerChallenge(side: 'left' | 'right') {
   }
 }
 function nextChallengeQuestion() {
-  if (!isFull && freeUsage.questions >= 3) {
-    setPaywallReason('questions')
+  if (challengeQuestion >= 5) {
+    setContrastPhase('result')
     return
   }
 
-  if (challengeQuestion >= 5) {
-    setContrastPhase('result')
+  if (!isFull && freeUsage.questions >= 3) {
+    setPaywallReason('questions')
     return
   }
 
@@ -1053,7 +1053,7 @@ function nextChallengeQuestion() {
             <div>
               <div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
-                <div className="language-switch" aria-label="Language">
+                <div className="language-switch" aria-label={t('語言', 'Language')}>
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
                   <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
                 </div>
@@ -1073,7 +1073,7 @@ function nextChallengeQuestion() {
                   </a>
                 </div>
               </div>
-              <p className="tagline">Level 1 Lab — test two-vowel contrasts before we build the course.</p>
+              <p className="tagline">Lab — test two-vowel contrasts before we build the course.</p>
             </div>
           </header>
           <MainNav active="lab" />
@@ -1081,7 +1081,7 @@ function nextChallengeQuestion() {
           <ProductInfo />
 
           <p className="eyebrow">Step 3D-2 · L1 Lab</p>
-          <h1 className="contrast-title">Level 1 · Two Vowels</h1>
+          <h1 className="contrast-title">Two Vowels</h1>
           <p className="contrast-subtitle">Two vowels at a time. Prefer the same consonant frame; near-consonant pairs stay experimental.</p>
 
           <div className="qa-pair-tabs">
@@ -1648,7 +1648,7 @@ function nextChallengeQuestion() {
             <div>
               <div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
-                <div className="language-switch" aria-label="Language">
+                <div className="language-switch" aria-label={t('語言', 'Language')}>
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
                   <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
                 </div>
@@ -1675,7 +1675,7 @@ function nextChallengeQuestion() {
           <InAppBrowserNotice />
           <ProductInfo />
 
-          <p className="eyebrow">{t('自由選 2 音 · 第 1 級','Choose 2 · Level 1')}</p>
+          <p className="eyebrow">{t('自由選 2 音','Choose 2')}</p>
           <h1 className="contrast-title">{t('請點選任 2 個音標練習','Pick two vowel sounds')}</h1>
           <p className="contrast-subtitle"></p>
 
@@ -1730,8 +1730,8 @@ function nextChallengeQuestion() {
 
           {!lib && (
             <div className="pair-unavailable">
-              <strong>This pair is not lesson-ready yet.</strong>
-              <p>We only enable practice after two same-consonant frames have been mapped and audio-checked.</p>
+              <strong>{t('這組母音尚未開放練習。', 'This pair is not lesson-ready yet.')}</strong>
+              <p>{t('教材與音訊確認完成後，才會開放這組練習。', 'We only enable practice after two same-consonant frames have been mapped and audio-checked.')}</p>
             </div>
           )}
 
@@ -1844,7 +1844,7 @@ function nextChallengeQuestion() {
                 }}>/{item.vowel}/{answered?' 🔊':''}</button>
               })}</div>
               {chooseAnswer!==null&&<div className={`challenge-feedback ${chooseAnswer===chooseTarget?'correct':'wrong'}`}><strong>{chooseAnswer===chooseTarget?t('✓ 正確！','✓ Correct!'):t('✕ 再試一次','✕ Not quite')}</strong><p>{t('正確發音：','The sound was')} /{items[chooseTarget].vowel}/</p><small>{t('點選任一答案即可再次聆聽比較。','Tap either answer to compare the sounds.')}</small><button className="next-question-button challenge-action-button" onClick={()=>{
-if (!isFull && freeUsage.questions >= 3) {
+if (chooseQuestion < 5 && !isFull && freeUsage.questions >= 3) {
   setPaywallReason('questions')
   setChoosePhase('compare')
   return
@@ -1865,7 +1865,7 @@ if (chooseQuestion >= 5) {
             </div>
           })()}
 
-          {lib && choosePhase==='result'&&<div className="level-result"><p className="eyebrow">{t('練習完成','Practice complete')}</p><h1>{chooseScore} / 6</h1><div className="result-actions"><button className="challenge-action-button" onClick={()=>setChoosePhase('compare')}>{t('← 再比較一次','← Compare again')}</button><button className="challenge-action-button" onClick={()=>{setChooseQuestion(0);setChooseScore(0);setChooseAnswer(null);setChooseHasListened(false);setChooseTarget(Math.random()<.5?0:1);setChoosePhase('challenge')}}>{t('重新挑戰','Retry Challenge')}</button></div></div>}
+          {lib && choosePhase==='result'&&<div className="level-result"><p className="eyebrow">{t('練習完成','Practice complete')}</p><h1>{chooseScore} / 6</h1><div className="result-actions"><button className="challenge-action-button" onClick={()=>setChoosePhase('compare')}>{t('← 再比較一次','← Compare again')}</button><button className="challenge-action-button" onClick={()=>{if (!isFull && freeUsage.questions >= 3) {setPaywallReason('questions');return} setChooseQuestion(0);setChooseScore(0);setChooseAnswer(null);setChooseHasListened(false);setChooseTarget(Math.random()<.5?0:1);setChoosePhase('challenge')}}>{t('重新挑戰','Retry Challenge')}</button></div>{paywallReason === 'questions' && renderPaywall()}</div>}
         </section>
         <SiteFooter />
     </main>
@@ -2033,7 +2033,7 @@ if (chooseQuestion >= 5) {
     return <main className="app-shell"><section className="app-card vowel-test-card">
       <header className="header"><div><div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
-                <div className="language-switch" aria-label="Language">
+                <div className="language-switch" aria-label={t('語言', 'Language')}>
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
                   <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
                 </div>
@@ -2176,7 +2176,7 @@ if (chooseQuestion >= 5) {
             <div>
               <div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
-                <div className="language-switch" aria-label="Language">
+                <div className="language-switch" aria-label={t('語言', 'Language')}>
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
                   <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
                 </div>
@@ -2205,8 +2205,8 @@ if (chooseQuestion >= 5) {
 
           {contrastPhase === 'learn' && (
             <>
-              <p className="eyebrow">{t('第 1 級 · /æ/ vs /ɛ/','Level 1 · /æ/ vs /ɛ/')}</p>
-              <h1 className="contrast-title">{contrastStage.id} — {contrastStage.title}</h1>
+              <p className="eyebrow">{t('/æ/ vs /ɛ/','/æ/ vs /ɛ/')}</p>
+              <h1 className="contrast-title">{contrastStage.id} — {contrastStage.id === '1C' ? t('混合練習', 'Mixed Frames') : contrastStage.title}</h1>
               <p className="contrast-subtitle">{t('請點選組別練習：','Choose a group to practice:')}</p>
 
               <div className="level-stage-tabs">
@@ -2314,7 +2314,7 @@ if (chooseQuestion >= 5) {
           {contrastPhase === 'challenge' && (
             <>
               <div className="challenge-topbar">
-                <p className="eyebrow">{t('第 1 級 · 挑戰','Level 1 · Challenge')}</p>
+                <p className="eyebrow">{t('挑戰','Challenge')}</p>
                 <button className="challenge-exit" onClick={() => {
                   stopContrastRepeat()
                   setChallengeAnswer(null)
@@ -2387,12 +2387,13 @@ if (chooseQuestion >= 5) {
                   </div>
                 </div>
               )}
+              {paywallReason === 'questions' && renderPaywall()}
             </>
           )}
 
           {contrastPhase === 'result' && (
             <div className="level-result">
-              <p className="eyebrow">{contrastStage.id} {t('完成','complete')} · {contrastStage.title}</p>
+              <p className="eyebrow">{contrastStage.id} {t('完成','complete')} · {contrastStage.id === '1C' ? t('混合練習', 'Mixed Frames') : contrastStage.title}</p>
               <h1>{challengeScore} / 6</h1>
               <p>{challengeScore >= 5 ? t('太棒了！你已經能分辨 /æ/ 和 /ɛ/ 的差異。', 'Excellent — your ear is separating /æ/ and /ɛ/.') :
                 challengeScore >= 4
@@ -2410,6 +2411,7 @@ if (chooseQuestion >= 5) {
                   <button className="challenge-action-button" onClick={startChallenge}>{t('重新挑戰','Retry Challenge')}</button>
                 )}
               </div>
+              {paywallReason === 'questions' && renderPaywall()}
             </div>
           )}
         </section>
@@ -2426,7 +2428,7 @@ if (chooseQuestion >= 5) {
     return <main className="app-shell"><section className="app-card vowel-test-card consonant-test-card">
       <header className="header"><div><div className="brand-row">
         <div className="brand">EnSound <span>UP</span></div>
-        <div className="language-switch" aria-label="Language">
+        <div className="language-switch" aria-label={t('語言', 'Language')}>
           <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
           <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
         </div>
@@ -2528,7 +2530,7 @@ if (chooseQuestion >= 5) {
     />
     <div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
-                <div className="language-switch" aria-label="Language">
+                <div className="language-switch" aria-label={t('語言', 'Language')}>
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
                   <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
                 </div>
@@ -2588,6 +2590,10 @@ if (chooseQuestion >= 5) {
                 </button>
               </div>
               <button className="start-challenge" onClick={() => {
+                if (!isFull && freeUsage.questions >= 3) {
+                  setPaywallReason('questions')
+                  return
+                }
                 stopConsonantLoop()
                 setConsonantQuestion(0)
                 setConsonantScore(0)
@@ -2597,7 +2603,7 @@ if (chooseQuestion >= 5) {
                 setConsonantPhase('challenge')
               }}>{t('開始挑戰 →', 'Start Challenge →')}</button>
               <button className="secondary-test-button" onClick={() => { setConsonantTestQuestions([]); setPaywallReason(null); setScreen('consonantTest') }}>{t('子音綜合測驗 · 10 題 →', 'Consonant Comprehensive Test · 10 →')}</button>
-              {paywallReason === 'repeat' && renderPaywall()}
+              {(paywallReason === 'repeat' || paywallReason === 'questions') && renderPaywall()}
             </>
           ) : consonantPhase === 'challenge' ? (
             <>
@@ -2630,6 +2636,7 @@ if (chooseQuestion >= 5) {
                         if (consonantAnswer !== null) {
                           speakWord(item.word, 0.82)
                         } else {
+                          if (!isFull) setFreeUsage((current) => ({ ...current, questions: current.questions + 1 }))
                           setConsonantAnswer(index as 0 | 1)
                           if (index === consonantTarget) setConsonantScore((score) => score + 1)
                         }
@@ -2655,6 +2662,10 @@ if (chooseQuestion >= 5) {
                       if (consonantQuestion >= 5) {
                         setConsonantPhase('result')
                       } else {
+                        if (!isFull && freeUsage.questions >= 3) {
+                          setPaywallReason('questions')
+                          return
+                        }
                         setConsonantQuestion((question) => question + 1)
                         setConsonantTarget(Math.random() < 0.5 ? 0 : 1)
                         setConsonantListened(false)
@@ -2664,6 +2675,7 @@ if (chooseQuestion >= 5) {
                   </div>
                 </div>
               )}
+              {paywallReason === 'questions' && renderPaywall()}
             </>
           ) : (
             <div className="level-result">
@@ -2677,6 +2689,10 @@ if (chooseQuestion >= 5) {
               <div className="result-actions">
                 <button className="challenge-action-button" onClick={() => setConsonantPhase('compare')}>{t('← 再比較一次', '← Compare again')}</button>
                 <button className="challenge-action-button" onClick={() => {
+                  if (!isFull && freeUsage.questions >= 3) {
+                    setPaywallReason('questions')
+                    return
+                  }
                   setConsonantQuestion(0)
                   setConsonantScore(0)
                   setConsonantTarget(Math.random() < 0.5 ? 0 : 1)
@@ -2685,6 +2701,7 @@ if (chooseQuestion >= 5) {
                   setConsonantPhase('challenge')
                 }}>{t('重新挑戰', 'Retry Challenge')}</button>
               </div>
+              {paywallReason === 'questions' && renderPaywall()}
             </div>
           )}
         </section>
@@ -2701,7 +2718,7 @@ if (chooseQuestion >= 5) {
             <div>
               <div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
-                <div className="language-switch" aria-label="Language">
+                <div className="language-switch" aria-label={t('語言', 'Language')}>
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
                   <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
                 </div>
@@ -2784,7 +2801,7 @@ if (chooseQuestion >= 5) {
             <div>
               <div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
-                <div className="language-switch" aria-label="Language">
+                <div className="language-switch" aria-label={t('語言', 'Language')}>
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
                   <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
                 </div>
@@ -2811,7 +2828,7 @@ if (chooseQuestion >= 5) {
           <InAppBrowserNotice />
           <ProductInfo />
 
-          <p className="eyebrow">{selectedSoundLetter} Sound Map</p>
+          <p className="eyebrow">{t(`${selectedSoundLetter} 發音對照`, `${selectedSoundLetter} Sound Map`)}</p>
           <h1 className="sound-map-title">{t(`字母「${selectedSoundLetter}」的發音是怎樣的？`, `How can “${selectedSoundLetter}” sound?`)}</h1>
           <p className="sound-map-intro">
             {t('請點選下列音標發音練習','Tap a sound below to practice pronunciation.')}
@@ -2892,7 +2909,7 @@ if (chooseQuestion >= 5) {
           <div>
             <div className="brand-row">
                 <div className="brand">EnSound <span>UP</span></div>
-                <div className="language-switch" aria-label="Language">
+                <div className="language-switch" aria-label={t('語言', 'Language')}>
                   <button className={uiLang === 'zh-TW' ? 'active' : ''} onClick={() => changeUiLang('zh-TW')}>繁中</button>
                   <button className={uiLang === 'en' ? 'active' : ''} onClick={() => changeUiLang('en')}>EN</button>
                 </div>
@@ -2914,7 +2931,6 @@ if (chooseQuestion >= 5) {
               </div>
             <p className="tagline">{t('點選單字，聽清楚發音。','Tap a word. Hear it clearly.')}</p>
           </div>
-          <button className="icon-button" aria-label="Settings">&#9881;</button>
         </header>
 
         <section className="input-section">
@@ -2927,7 +2943,7 @@ if (chooseQuestion >= 5) {
             id="sentence"
             value={sentence}
             onChange={(event) => handleSentenceChange(event.target.value)}
-            placeholder="Type an English sentence..."
+            placeholder={t('輸入英文單字或句子…', 'Type an English sentence...')}
             rows={3}
           />
           <div className="sentence-play-controls">
@@ -2958,19 +2974,19 @@ if (chooseQuestion >= 5) {
                 </button>
               ))
             ) : (
-              <p className="empty">Type a sentence to begin.</p>
+              <p className="empty">{t('輸入單字或句子即可開始。', 'Type a sentence to begin.')}</p>
             )}
           </div>
         </section>
 
         <section className={`pronunciation-card ${selectedWord ? '' : 'disabled'}`}>
           <p className="eyebrow">{t('發音練習','Pronunciation target')}</p>
-          <h1>{selectedWord?.spoken || 'Select a word'}</h1>
+          <h1>{selectedWord?.spoken || t('請選擇一個單字', 'Select a word')}</h1>
 
           {selectedWord && (
             <div className="pronunciation-details">
               {pronunciationLoading ? (
-                <p className="ipa">Loading pronunciation...</p>
+                <p className="ipa">{t('正在載入發音…', 'Loading pronunciation...')}</p>
               ) : primaryPronunciation ? (
                 <>
                   <p className="ipa">{primaryPronunciation.ipa}</p>
@@ -2982,7 +2998,7 @@ if (chooseQuestion >= 5) {
                         aria-expanded={showPronunciations}
                         onClick={() => setShowPronunciations((value) => !value)}
                       >
-                        {pronunciation.pronunciations.length} pronunciations
+                        {pronunciation.pronunciations.length} {t('種發音', 'pronunciations')}
                         <span aria-hidden="true">{showPronunciations ? '▲' : '▼'}</span>
                       </button>
 
@@ -3002,7 +3018,7 @@ if (chooseQuestion >= 5) {
                             >
                               <span>{variant.ipa}</span>
                               {selectedPronunciationIndex === index && (
-                                <small>Selected</small>
+                                <small>{t('已選擇', 'Selected')}</small>
                               )}
                             </button>
                           ))}
@@ -3012,7 +3028,7 @@ if (chooseQuestion >= 5) {
                   )}
                 </>
               ) : (
-                <p className="ipa">Pronunciation not found</p>
+                <p className="ipa">{t('找不到這個單字的發音', 'Pronunciation not found')}</p>
               )}
             </div>
           )}
