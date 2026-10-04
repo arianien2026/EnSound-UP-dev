@@ -1,6 +1,6 @@
 # EnSound UP payment backend skeleton
 
-This separate FastAPI service exposes `GET /health` and `GET /health/db`. It does not process payments or grant access. Render PostgreSQL is the planned authoritative store; this step adds connection and migration infrastructure but no business tables.
+This separate FastAPI service exposes `GET /health` and `GET /health/db`. It does not process payments or grant access. Render PostgreSQL is the planned authoritative store. The first migration creates the `orders` table; no order API or payment flow exists yet.
 
 ## Run locally (Windows PowerShell)
 
@@ -37,14 +37,15 @@ If the variable is absent or the database cannot be reached, `/health/db` return
 
 ## Migrations
 
-From `backend/` with `DATABASE_URL` set, future schema tasks can generate and apply Alembic revisions using the same virtual environment:
+From `backend/` with `DATABASE_URL` set, apply the reviewed `orders` migration and check the database revision using the same virtual environment:
 
 ```powershell
-.\.venv\Scripts\python.exe -m alembic revision --autogenerate -m "describe schema change"
 .\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic current
+.\.venv\Scripts\python.exe -m alembic heads
 ```
 
-There are no models or migration revisions yet. Do not run autogenerate until a future task adds reviewed models and a reachable PostgreSQL database. `alembic.ini` contains no credentials; migration execution reads `DATABASE_URL` from the backend environment.
+The first revision is `1c_pending_orders`. Its downgrade drops the `orders` table and its data, so run `alembic downgrade base` only on a disposable database after reviewing the effect. Future schema changes can use `alembic revision --autogenerate -m "describe schema change"` with a reachable database; review the generated migration before applying it. `alembic.ini` contains no credentials; migration execution reads `DATABASE_URL` from the backend environment.
 
 ## Render configuration (future deployment)
 

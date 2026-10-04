@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 
 from app.database import Base, get_database_url
+from app import models  # noqa: F401 - register models with Base.metadata
 
 
 target_metadata = Base.metadata
