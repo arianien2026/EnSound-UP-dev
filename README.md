@@ -1,5 +1,7 @@
 # EnSound UP — Step 1 Sentence Interaction Prototype
 
+Payment and entitlement planning: [Payment Architecture](docs/PAYMENT_ARCHITECTURE.md).
+
 This prototype implements the first EnSound UP flow:
 
 1. Type an English sentence.
