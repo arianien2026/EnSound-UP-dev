@@ -6,9 +6,13 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import sessionmaker
 
 from app.api.orders import CreateOrderRequest, create_order
+from app.database import Base
+from app.services.email_delivery import EmailDeliveryError
 from app.services.pricing import PRODUCT_CODE, PROMO_PRICE, REGULAR_PRICE, get_price
 
 
@@ -103,9 +107,24 @@ class FakeSession:
 
 
 class OrderCreationTests(unittest.TestCase):
+    def test_delivery_uses_response_value_after_real_session_closes(self) -> None:
+        engine = create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
+        Base.metadata.create_all(engine)
+        factory = sessionmaker(bind=engine)  # SQLAlchemy's default expire_on_commit=True.
+        with patch("app.api.orders.get_session_factory", return_value=factory), patch(
+            "app.api.orders.get_email_config"
+        ), patch("app.api.orders.send_verification_email") as send:
+            response = create_order(CreateOrderRequest(email=" Learner@EXAMPLE.COM "))
+        self.assertEqual(response.entitlement_email, "Learner@example.com")
+        self.assertEqual(send.call_args.args[0], response.entitlement_email)
+        send.assert_called_once()
+
     def test_order_is_server_owned_pending_and_expires_in_two_hours(self) -> None:
         session = FakeSession()
-        with patch("app.api.orders.get_session_factory", return_value=lambda: session):
+        with patch("app.api.orders.get_session_factory", return_value=lambda: session), patch(
+            "app.api.orders.get_email_config"
+        ), patch("app.api.orders.send_verification_email") as send:
             result = create_order(CreateOrderRequest(email=" Learner@EXAMPLE.COM "))
         self.assertTrue(session.committed)
         self.assertEqual(result.order_id, session.order.id)
@@ -116,15 +135,41 @@ class OrderCreationTests(unittest.TestCase):
         self.assertEqual(result.expires_at - result.created_at, timedelta(hours=2))
         self.assertEqual(session.order.paid_at, None)
         self.assertEqual(session.order.provider_order_id, None)
+        self.assertIsNone(session.order.email_verified_at)
+        self.assertEqual(len(session.order.email_verification_token_hash), 64)
+        self.assertNotEqual(send.call_args.args[1], session.order.email_verification_token_hash)
 
     def test_failed_commit_rolls_back_without_returning_order(self) -> None:
         session = FakeSession(fail_commit=True)
-        with patch("app.api.orders.get_session_factory", return_value=lambda: session):
+        with patch("app.api.orders.get_session_factory", return_value=lambda: session), patch(
+            "app.api.orders.get_email_config"
+        ), patch("app.api.orders.send_verification_email") as send:
             with self.assertRaises(HTTPException) as caught:
                 create_order(CreateOrderRequest(email="learner@example.com"))
         self.assertEqual(caught.exception.status_code, 503)
         self.assertEqual(caught.exception.detail, "Order service unavailable")
         self.assertTrue(session.rolled_back)
+        send.assert_not_called()
+
+    def test_missing_email_configuration_does_not_create_order(self) -> None:
+        with patch.dict(os.environ, {}, clear=True), patch(
+            "app.api.orders.get_session_factory"
+        ) as factory:
+            with self.assertRaises(HTTPException) as caught:
+                create_order(CreateOrderRequest(email="learner@example.com"))
+        self.assertEqual(caught.exception.status_code, 503)
+        factory.assert_not_called()
+
+    def test_delivery_failure_leaves_existing_order_unverified(self) -> None:
+        session = FakeSession()
+        with patch("app.api.orders.get_session_factory", return_value=lambda: session), patch(
+            "app.api.orders.get_email_config"
+        ), patch("app.api.orders.send_verification_email", side_effect=EmailDeliveryError()):
+            with self.assertRaises(HTTPException) as caught:
+                create_order(CreateOrderRequest(email="learner@example.com"))
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertTrue(session.committed)
+        self.assertIsNone(session.order.email_verified_at)
 
 
 if __name__ == "__main__":
