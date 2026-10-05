@@ -60,6 +60,14 @@ Regular price is NT$199 (`regular`). To enable NT$99 (`launch_promo`), set both 
 
 For local automated checks, from `backend/` run `.\.venv\Scripts\python.exe -m unittest discover -s tests -v` in PowerShell. A successful persistence test requires a real **Development** PostgreSQL `DATABASE_URL`; mocked tests do not prove that a database commit worked. Repeated POST requests may create separate pending orders at this stage. Duplicate-submit/idempotency protection is required before Production payment initiation; this endpoint does not charge money.
 
+## ECPay Stage checkout foundation
+
+Set `ECPAY_STAGE_MERCHANT_ID`, `ECPAY_STAGE_HASH_KEY`, `ECPAY_STAGE_HASH_IV`, and `ECPAY_STAGE_RETURN_URL` in the **backend process environment**. The return URL must be a public HTTPS backend notification URL. Keep the Stage credentials server-side; do not put them in Git or the frontend. The checkout endpoint is fixed to ECPay's Stage URL and cannot be configured to use Production. Missing or invalid configuration fails closed. The sample values in the automated checksum vector are publicly published ECPay examples, not EnSound UP credentials.
+
+`POST /orders/{order_id}/checkout` accepts an existing order UUID in the path and no payment fields in the body (an empty JSON object is also accepted). It rejects extra fields such as `amount`, `product_code`, `ReturnURL`, or `HashKey`. A pending, unexpired order with confirmed email is required. On success it returns `checkout_url` and signed `fields` for a browser to submit as an `application/x-www-form-urlencoded` POST form to ECPay Stage. The order's stored amount is used as an integer TWD amount. The `provider_order_id` stores one ECPay trade number per order, protected by its existing unique database constraint; repeated checkout-data requests for the same order reuse that trade number. If ECPay has already accepted a transaction with it, do not submit the same number as a new transaction; a new verified order is needed for another checkout attempt.
+
+This stage does **not** implement the configured `ReturnURL` handler, complete a payment, or issue an entitlement. Do not complete a real or simulated Stage payment expecting access until the separately verified callback checkpoint is available. Use only Development PostgreSQL and ECPay Stage. ECPay's All-in-One form specification and checksum example: <https://developers.ecpay.com.tw/2862/> and <https://developers.ecpay.com.tw/2902/>.
+
 ## Migrations
 
 From `backend/` with `DATABASE_URL` set, apply the reviewed `orders` migration and check the database revision using the same virtual environment:
