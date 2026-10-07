@@ -1,4 +1,4 @@
-"""ECPay All-in-One Stage checkout fields; no payment-result handling here."""
+"""ECPay All-in-One Stage checkout fields and shared checksum."""
 
 import hashlib
 import os
@@ -56,9 +56,13 @@ def check_mac_value(fields: dict[str, str], config: StageConfig) -> str:
     # ECPay All-in-One: sort fields, wrap with HashKey/HashIV, .NET-style
     # form URL encoding, lowercase, SHA-256, uppercase hex. CheckMacValue
     # itself must not be included in the checksum input.
-    payload = "&".join(f"{key}={value}" for key, value in sorted(fields.items()))
+    payload = "&".join(
+        f"{key}={value}" for key, value in sorted(fields.items()) if key != "CheckMacValue"
+    )
     wrapped = f"HashKey={config.hash_key}&{payload}&HashIV={config.hash_iv}"
-    encoded = quote_plus(wrapped, safe="-_.!*()").lower()
+    # Python always leaves RFC 3986's unreserved '~' literal, even when it
+    # is omitted from `safe`. ECPay's .NET URL-encoding table requires %7e.
+    encoded = quote_plus(wrapped, safe="-_.!*()").replace("~", "%7e").lower()
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest().upper()
 
 

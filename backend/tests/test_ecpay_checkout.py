@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.api.checkout import CheckoutRequest, create_stage_checkout
 from app.models import Order
-from app.services.ecpay_stage import StageConfig, check_mac_value, get_stage_config
+from app.services.ecpay_stage import StageConfig, check_mac_value, checkout_fields, get_stage_config
 from app.services.pricing import PRODUCT_CODE
 
 
@@ -141,6 +141,32 @@ class ECPayStageCheckoutTests(unittest.TestCase):
         }
         self.assertEqual(check_mac_value(fields, published),
                          "6C51C9E6888DE861FD62FB1DD17029FC742634498FD813DC43D4243B5685B840")
+
+    def test_ecpay_encoding_of_tilde_and_checksum_field_exclusion(self):
+        # Derived from the official All-in-One sample with '~' added to
+        # TradeDesc. The expected digest was calculated from ECPay's written
+        # URL-encoded preimage (including %7e), not from check_mac_value.
+        config = StageConfig("3002607", "pwFHCqoQZGmho4w6", "EkRm7iFT261dpevs", "")
+        fields = {
+            "TradeDesc": "促銷~方案", "PaymentType": "aio",
+            "MerchantTradeDate": "2023/03/12 15:30:23", "MerchantTradeNo": "ecpay20230312153023",
+            "MerchantID": "3002607", "ReturnURL": "https://www.ecpay.com.tw/receive.php",
+            "ItemName": "Apple iphone 15", "TotalAmount": "30000",
+            "ChoosePayment": "ALL", "EncryptType": "1",
+        }
+        expected = "8FE0713AE2640FCE1F2E1D28F0480D2A2C39A580633E1946905CC660E20C2290"
+        self.assertEqual(check_mac_value(fields, config), expected)
+        self.assertEqual(check_mac_value(dict(reversed(list(fields.items()))), config), expected)
+        self.assertEqual(check_mac_value({**fields, "CheckMacValue": "UNTRUSTED"}, config), expected)
+
+    def test_checkout_fields_sign_exact_stage_fields_with_ecpay_tilde_encoding(self):
+        config = StageConfig("3002607", "pwFHCqoQZGmho4w6", "EkRm7iFT261dpevs",
+                             "https://www.ecpay.com.tw/receive~up")
+        fields = checkout_fields(verified_order(), "ES123456789012345678",
+                                 datetime(2023, 3, 12, 7, 30, 23, tzinfo=timezone.utc), config)
+        self.assertEqual(fields["ReturnURL"], config.return_url)
+        self.assertEqual(fields["CheckMacValue"],
+                         "D99050794B2C6BCAB8C46639BDCA852FA5EE18C4B62F9CAA0F83A907CB17E81B")
 
 
 if __name__ == "__main__":

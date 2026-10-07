@@ -160,6 +160,26 @@ class ECPayReturnTests(unittest.TestCase):
         result, _ = self.send(None, self.fields(order))
         self.assert_error(result, 409)
 
+    def test_callback_accepts_independently_signed_ecpay_tilde_payload_and_rejects_tampering(self):
+        order = pending_order(provider_order_id="ES123456789012345678")
+        fields = self.fields(order, RtnMsg="Success~")
+        # Static digest calculated from the documented ECPay URL-encoded
+        # preimage with RtnMsg=Success%7e, independent of our MAC function.
+        expected = "5044F8413FCDAC555BAA84CA631D19B00E317CD849B75F3DE91ED79DF1B21D15"
+        self.assertEqual(fields["CheckMacValue"], expected)
+        fields["CheckMacValue"] = expected
+        result, session = self.send(order, fields)
+        self.assertEqual(result.body, b"1|OK")
+        self.assertEqual(session.commits, 1)
+        again, duplicate_session = self.send(order, fields)
+        self.assertEqual(again.body, b"1|OK")
+        self.assertEqual(duplicate_session.commits, 0)
+
+        altered = {**fields, "RtnMsg": "Changed~"}
+        rejected, rejected_session = self.send(order, altered)
+        self.assert_error(rejected, 403)
+        self.assertEqual(rejected_session.commits, 0)
+
     def test_unverified_wrong_product_and_bad_states_rejected(self):
         for changes in ({"email_verified_at": None}, {"product_code": "other"},
                         {"currency": "USD"}, {"status": "cancelled"},
