@@ -4,12 +4,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.orders import router as orders_router
 from app.api.checkout import router as checkout_router
+from app.api.ecpay_return import router as ecpay_return_router
 from app.database import get_engine
 
 
 app = FastAPI()
 app.include_router(orders_router)
 app.include_router(checkout_router)
+app.include_router(ecpay_return_router)
 
 
 @app.get("/health")

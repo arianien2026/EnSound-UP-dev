@@ -22,6 +22,7 @@ class Order(Base):
         ),
         CheckConstraint("expires_at > created_at", name="ck_orders_expiry_after_creation"),
         UniqueConstraint("provider_order_id", name="uq_orders_provider_order_id"),
+        UniqueConstraint("provider_trade_no", name="uq_orders_provider_trade_no"),
         UniqueConstraint(
             "email_verification_token_hash", name="uq_orders_email_verification_token_hash"
         ),
@@ -43,6 +44,10 @@ class Order(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     provider_order_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    provider_trade_no: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    payment_environment: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    provider_payment_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    provider_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     email_verification_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     email_verification_expires_at: Mapped[datetime | None] = mapped_column(

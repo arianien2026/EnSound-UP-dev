@@ -1,6 +1,6 @@
 # EnSound UP payment backend skeleton
 
-This separate FastAPI service exposes `GET /health`, `GET /health/db`, and `POST /orders`. It does not process payments or grant access. Render PostgreSQL is the planned authoritative store. The first migration creates the `orders` table.
+This separate FastAPI service exposes health checks, pending orders, email verification, ECPay Stage checkout, and a Stage payment notification endpoint. It records authenticated Stage payment results but does not grant access. Render PostgreSQL is the authoritative store for the Development backend.
 
 ## Run locally (Windows PowerShell)
 
@@ -66,7 +66,9 @@ Set `ECPAY_STAGE_MERCHANT_ID`, `ECPAY_STAGE_HASH_KEY`, `ECPAY_STAGE_HASH_IV`, an
 
 `POST /orders/{order_id}/checkout` accepts an existing order UUID in the path and no payment fields in the body (an empty JSON object is also accepted). It rejects extra fields such as `amount`, `product_code`, `ReturnURL`, or `HashKey`. A pending, unexpired order with confirmed email is required. On success it returns `checkout_url` and signed `fields` for a browser to submit as an `application/x-www-form-urlencoded` POST form to ECPay Stage. The order's stored amount is used as an integer TWD amount. The `provider_order_id` stores one ECPay trade number per order, protected by its existing unique database constraint; repeated checkout-data requests for the same order reuse that trade number. If ECPay has already accepted a transaction with it, do not submit the same number as a new transaction; a new verified order is needed for another checkout attempt.
 
-This stage does **not** implement the configured `ReturnURL` handler, complete a payment, or issue an entitlement. Do not complete a real or simulated Stage payment expecting access until the separately verified callback checkpoint is available. Use only Development PostgreSQL and ECPay Stage. ECPay's All-in-One form specification and checksum example: <https://developers.ecpay.com.tw/2862/> and <https://developers.ecpay.com.tw/2902/>.
+`POST /payments/ecpay/return` is the **server-to-server** ECPay Stage `ReturnURL`; configure `ECPAY_STAGE_RETURN_URL` to this public HTTPS backend path. It accepts form-encoded notifications, verifies their CheckMacValue with Stage credentials and matches MerchantID, MerchantTradeNo, and the stored TWD amount before updating an order. Only a genuine `RtnCode=1` notification with `SimulatePaid` absent or `0` can mark a pending or expired order paid. It stores ECPay's TradeNo, payment method and payment time, and replies with exactly `1|OK` after safe handling. A matching repeat is idempotent; simulation and failure notifications do not mark the order paid. Rejected/conflicting notifications and database failures do not receive that acknowledgement. There is no browser success callback on this path.
+
+The two-hour `expires_at` blocks **new checkout**, not a verified payment from an existing checkout: a delayed authentic notification can mark the order paid without changing its original expiry. This Stage-only payment record does **not** create an entitlement or grant Full Access. Apply migration `2b_ecpay_stage_payment_result` to Development PostgreSQL before configuring the ReturnURL. Run the automated tests and validate the Stage callback end to end before any Production configuration; no real PostgreSQL or ECPay call is exercised by the unit tests. ECPay's All-in-One form specification, payment result and checksum documentation: <https://developers.ecpay.com.tw/2862/>, <https://developers.ecpay.com.tw/2878/>, and <https://developers.ecpay.com.tw/2902/>.
 
 ## Migrations
 
@@ -78,7 +80,7 @@ From `backend/` with `DATABASE_URL` set, apply the reviewed `orders` migration a
 .\.venv\Scripts\python.exe -m alembic heads
 ```
 
-The first revision is `1c_pending_orders`; `1e_email_verification` adds nullable verification fields and a unique digest constraint without rewriting 1C or existing order rows. A downgrade removes verification state; `alembic downgrade base` drops the `orders` table and its data. Do not downgrade a real Development database merely for testing. Future schema changes can use `alembic revision --autogenerate -m "describe schema change"` with a reachable database; review the generated migration before applying it. `alembic.ini` contains no credentials; migration execution reads `DATABASE_URL` from the backend environment.
+The first revision is `1c_pending_orders`; `1e_email_verification` adds verification fields; `2b_ecpay_stage_payment_result` adds nullable Stage payment identity fields and a unique provider TradeNo constraint. Do not downgrade a real Development database merely for testing: downgrades discard stored payment information, and `alembic downgrade base` drops the entire `orders` table. Future schema changes can use `alembic revision --autogenerate -m "describe schema change"` with a reachable database; review the generated migration before applying it. `alembic.ini` contains no credentials; migration execution reads `DATABASE_URL` from the backend environment.
 
 ## Render configuration (future deployment)
 
