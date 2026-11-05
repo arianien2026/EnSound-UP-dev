@@ -6,13 +6,17 @@ DATABASE_URL must already be supplied privately in the process environment.
 import argparse
 import json
 import os
+import ssl
+import sys
 from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, select, text
 
-from app.database import Base, get_engine, get_session_factory
+from app.database import Base, get_database_url, get_engine, get_session_factory
+from sqlalchemy.engine import make_url
+import psycopg
 from app.models import (
     AuthorizedDevice, EmailClaimRateLimit, EmailClaimSession, EmailClaimToken,
     Entitlement, Order,
@@ -26,6 +30,54 @@ EXPECTED_TABLES = {
 }
 ORM_MODELS = (Order, Entitlement, AuthorizedDevice, EmailClaimToken,
               EmailClaimSession, EmailClaimRateLimit)
+
+
+def tls_failure_diagnostics(error: Exception) -> dict:
+    """Allowlisted diagnostics only: never emit exception text, URLs or env values."""
+    detail = str(getattr(error, "orig", error)).lower()
+    reason = "UNSPECIFIED"
+    for code, phrases in (
+        ("HOSTNAME_MISMATCH", ("does not match host name", "hostname mismatch")),
+        ("CA_FILE_MISSING", ("root certificate file",)),
+        ("CERTIFICATE_EXPIRED", ("certificate has expired",)),
+        ("CERTIFICATE_NOT_YET_VALID", ("certificate is not yet valid",)),
+        ("UNTRUSTED_CHAIN", ("unable to get local issuer certificate",
+                             "unable to verify the first certificate",
+                             "self-signed certificate", "self signed certificate")),
+        ("CERTIFICATE_VALIDATION_UNSPECIFIED", ("certificate verify failed",)),
+    ):
+        if any(phrase in detail for phrase in phrases):
+            reason = code
+            break
+    # A root certificate error can also mean unreadable/invalid content, not absence.
+    if reason == "CA_FILE_MISSING" and "does not exist" not in detail:
+        reason = "CA_FILE_ERROR"
+    result = {
+        "reason": reason, "python_version": sys.version.split()[0],
+        "psycopg_version": psycopg.__version__, "libpq_version": psycopg.pq.version(),
+        "psycopg_implementation": psycopg.pq.__impl__,
+        # This is Python's OpenSSL, not necessarily psycopg-binary's OpenSSL.
+        "python_openssl_version": ssl.OPENSSL_VERSION,
+        "ssl_cert_file_env_present": bool(os.environ.get("SSL_CERT_FILE")),
+        "ssl_cert_dir_env_present": bool(os.environ.get("SSL_CERT_DIR")),
+        "known_ca_files_readable": {
+            path: Path(path).is_file() and os.access(path, os.R_OK)
+            for path in ("/usr/lib/psycopg-openssl/cert.pem",
+                         "/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/cert.pem")
+        },
+    }
+    try:
+        url = make_url(get_database_url())
+        root = url.query.get("sslrootcert")
+        result["sslmode"] = ("verify-full" if url.query.get("sslmode") == "verify-full"
+                             else "OTHER_OR_UNSET")
+        result["ca_source"] = ("system" if root == "system" else
+                               "explicit_file" if isinstance(root, str) else "UNSET")
+        if isinstance(root, str) and root != "system":
+            result["explicit_ca_file_readable"] = Path(root).is_file() and os.access(root, os.R_OK)
+    except Exception:
+        result["configuration"] = "UNAVAILABLE"
+    return result
 
 
 def local_revision_available() -> bool:
@@ -111,6 +163,7 @@ def probe(expected_host: str, expected_database: str = "neondb", *,
             error_code = "CERTIFICATE_VERIFICATION_FAILED"
         result.update(status="PARTIAL", error_type=type(error).__name__,
                       error_code=error_code,
+                      tls_diagnostics=tls_failure_diagnostics(error),
                       error="Application connection/probe failed; no exception details logged")
     finally:
         if engine is not None:
