@@ -1,0 +1,96 @@
+{
+  "task": "Neon-App-Integration-1D",
+  "mode": "PREPARATION ONLY; NOT APPLIED",
+  "repository": "arianien2026/EnSound-UP-dev",
+  "branch": "main",
+  "expected_baseline": "ca920c011fb2bfbd48398598ee3d06dc8857d490",
+  "render_workspace": "tea-daefoq0u01pc73ea7g30",
+  "render_service": "srv-db33dsm7bikc73bhukug",
+  "render_plan": "free",
+  "neon": {
+    "project": "nameless-dream-19898175",
+    "branch": "br-sparkling-grass-b8kgshc7",
+    "endpoint": "ep-sparkling-smoke-b80uupgp",
+    "database": "neondb",
+    "server_version_num": "180006",
+    "revision": "3c3b_device_release"
+  },
+  "settings_before": {
+    "root_directory": "backend",
+    "build_command": "pip install -r requirements.txt && python -m alembic upgrade head",
+    "start_command": "uvicorn app.main:app --host 0.0.0.0 --port $PORT",
+    "health_check_path": "",
+    "auto_deploy": "On Commit"
+  },
+  "settings_proposed": {
+    "root_directory": "backend",
+    "build_command": "pip install -r requirements.txt",
+    "start_command": "python -m scripts.check_neon_readonly --expected-host \"$ENSOUND_DEV_DATABASE_HOST\" --expected-database \"$ENSOUND_DEV_DATABASE_NAME\" --allow-existing-business-rows --require-read-only-default && exec uvicorn app.main:app --host 0.0.0.0 --port \"$PORT\"",
+    "health_check_path": "/health/db",
+    "auto_deploy": "Off; one explicit manual deploy only"
+  },
+  "environment_merge_only": {
+    "replace_all": false,
+    "secret_keys": {
+      "DATABASE_URL": "Fetch through the authorized Neon connection tool for the locked target; transfer in memory directly to this Render service's secret environment; never print or persist"
+    },
+    "non_secret_values": {
+      "ENSOUND_DEV_DATABASE_HOST": "ep-sparkling-smoke-b80uupgp.c-14.us-east-1.aws.neon.tech",
+      "ENSOUND_DEV_DATABASE_NAME": "neondb",
+      "PGOPTIONS": "-c default_transaction_read_only=on"
+    },
+    "all_other_keys": "Preserve. Do not read or export secret values. ECPay/Email writes remain disabled by the database read-only default."
+  },
+  "secret_preconditions": [
+    "Official URI must identify this exact branch endpoint/database; select the verified direct hostname if the connection tool returns this endpoint's pooler hostname",
+    "No URI options/hostaddr/service parameter may override the target or the PGOPTIONS read-only default",
+    "Application enforces sslmode=verify-full and sslrootcert=system (or an explicitly trusted CA); do not disable validation"
+  ],
+  "ordered_operations_after_separate_authorization": [
+    "Finish read-only environment-key and zero-cost usage/limit inspection; recheck identities and stop on any unexpected change",
+    "Turn this Render service's auto-deploy Off before any push; verify saved state",
+    "Save only the approved build/start/health settings; do not deploy the historical build with the new database secret",
+    "Merge only the four approved environment keys through the existing secure connector; do not replace the collection or expose values; API environment updates do not deploy by themselves",
+    "Commit only the approved manifest paths on the verified Development baseline, with message: Prepare Neon Development connection acceptance [skip ci]",
+    "Push that one commit to arianien2026/EnSound-UP-dev main; confirm the existing push-triggered GitHub Pages workflow is skipped and Render remains on manual deploy",
+    "Trigger exactly one manual deploy of that exact new commit on the locked Render Development service",
+    "Read controlled startup probe results and HTTP /health and /health/db; verify read-only default, native TLS with verify-full, database/version/revision, all six ORM SELECTs, session cleanup and empty business tables",
+    "Stop after verification; no retry, migrations, business writes, payments, emails, upgrades or Production actions"
+  ],
+  "authorization_status": "NOT GRANTED",
+  "open_gates": [],
+  "read_only_gate_results": {
+    "dashboard_authentication": "PASS",
+    "existing_environment_keys": [
+      "DATABASE_URL",
+      "ECPAY_STAGE_HASH_IV",
+      "ECPAY_STAGE_HASH_KEY",
+      "ECPAY_STAGE_MERCHANT_ID",
+      "ECPAY_STAGE_RETURN_URL",
+      "EMAIL_VERIFY_BASE_URL",
+      "RESEND_API_KEY",
+      "RESEND_FROM_EMAIL"
+    ],
+    "environment_values": "NOT REVEALED OR EXPORTED",
+    "workspace_plan": "Hobby",
+    "payment_method_on_file": false,
+    "service_plan": "Free",
+    "build_tier": "Starter, includes 500 free minutes",
+    "pipeline_minutes_used": 0,
+    "pipeline_minutes_included": 500,
+    "pipeline_monthly_spend_limit_usd": 0,
+    "free_instance_hours_used": 0.27,
+    "free_instance_hours_included": 750,
+    "bandwidth_used_mb": 0,
+    "bandwidth_included_gb": 5,
+    "current_month_usd": 0,
+    "projected_month_usd": 0,
+    "observed_date": "2026-11-03",
+    "dashboard_settings": "MATCH connector metadata",
+    "secret_scan": "PASS"
+  },
+  "deferred_configuration": {
+    "CLAIM_RATE_LIMIT_KEY": "Absent; add only when separately authorizing write-based Email Claim sandbox validation, not needed for this read-only connection acceptance release",
+    "ENSOUND_DEV_FRONTEND_URL": "Absent; configure in the later frontend/Email Claim end-to-end stage"
+  }
+}

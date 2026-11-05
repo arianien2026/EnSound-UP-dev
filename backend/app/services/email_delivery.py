@@ -62,6 +62,38 @@ def send_verification_email(recipient: str, token: str, config: EmailConfig) -> 
             "If you did not request this, you can ignore this message."
         ),
     }
+    _deliver(payload, config)
+
+
+def send_claim_email(recipient: str, token: str, config: EmailConfig) -> None:
+    link = f"{config.base_url}/access/claim#token={quote(token)}"
+    _deliver({
+        "from": config.sender,
+        "to": [recipient],
+        "subject": "EnSound UP - Confirm your access request",
+        "text": (
+            "Use this link to confirm your EnSound UP access request.\n"
+            f"Open it within 15 minutes: {link}\n"
+            "If you did not request this, you can ignore this message."
+        ),
+    }, config)
+
+
+def send_release_email(recipient: str, token: str, config: EmailConfig) -> None:
+    link = f"{config.base_url}/access/release#token={quote(token)}"
+    _deliver({
+        "from": config.sender,
+        "to": [recipient],
+        "subject": "EnSound UP - Confirm device release",
+        "text": (
+            "Use this link to confirm a device release request for EnSound UP.\n"
+            f"Open it within 15 minutes: {link}\n"
+            "If you did not request this, you can ignore this message."
+        ),
+    }, config)
+
+
+def _deliver(payload: dict, config: EmailConfig) -> None:
     request = Request(
         "https://api.resend.com/emails",
         data=json.dumps(payload).encode("utf-8"),

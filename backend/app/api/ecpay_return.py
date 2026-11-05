@@ -13,6 +13,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.database import get_session_factory
 from app.models import Order
 from app.services.ecpay_stage import check_mac_value, get_stage_config
+from app.services.entitlement_grant import (
+    EntitlementGrantUnavailable,
+    IneligibleEntitlementOrder,
+    grant_paid_order,
+)
 from app.services.pricing import PRODUCT_CODE
 
 
@@ -72,6 +77,7 @@ async def receive_ecpay_stage_result(request: Request) -> Response:
     success = fields["RtnCode"] == "1" and fields.get("SimulatePaid", "0") == "0"
     paid_details = _paid_details(fields) if success else None
 
+    order_id = None
     try:
         with get_session_factory()() as session:
             try:
@@ -86,6 +92,8 @@ async def receive_ecpay_stage_result(request: Request) -> Response:
                     raise HTTPException(status_code=409, detail="Payment notification does not match order")
 
                 if success:
+                    # Keep a plain UUID: the ORM row expires when its session closes.
+                    order_id = order.id
                     trade_no, payment_type, provider_paid_at = paid_details
                     if order.status == "paid":
                         if (order.provider_trade_no != trade_no or
@@ -111,4 +119,14 @@ async def receive_ecpay_stage_result(request: Request) -> Response:
                 raise
     except (SQLAlchemyError, RuntimeError, ValueError):
         raise HTTPException(status_code=503, detail="Payment notification unavailable") from None
+    if success:
+        try:
+            # The verified payment is durable before the independent grant begins.
+            granted = grant_paid_order(order_id)
+            if granted.source_order_id != order_id or granted.status != "active":
+                raise EntitlementGrantUnavailable("Entitlement is not active")
+        except (EntitlementGrantUnavailable, IneligibleEntitlementOrder):
+            # No ECPay acknowledgement: a retry or internal reconciliation can
+            # finish the grant without reverting the already committed payment.
+            raise HTTPException(status_code=503, detail="Payment access activation unavailable") from None
     return Response(content=ACK, media_type="text/plain")

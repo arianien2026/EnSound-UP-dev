@@ -13,6 +13,7 @@ from starlette.requests import Request
 from app.api.ecpay_return import receive_ecpay_stage_result
 from app.models import Order
 from app.services.ecpay_stage import check_mac_value, get_stage_config
+from app.services.entitlement_grant import EntitlementGrantUnavailable, GrantedEntitlement
 from app.services.pricing import PRODUCT_CODE
 from test_ecpay_checkout import STAGE_ENV
 
@@ -34,11 +35,13 @@ class FakeSession:
         self.commits = 0
         self.rollbacks = 0
         self.fail_commit = fail_commit
+        self.closed = False
 
     def __enter__(self):
         return self
 
     def __exit__(self, *_args):
+        self.closed = True
         return None
 
     def execute(self, statement):
@@ -77,7 +80,7 @@ class ECPayReturnTests(unittest.TestCase):
         return fields
 
     def send(self, order, fields=None, *, body=None, content_type="application/x-www-form-urlencoded",
-             fail_commit=False):
+             fail_commit=False, grant_error=None, grant_result=None):
         session = FakeSession(order, fail_commit=fail_commit)
         if body is None:
             body = urlencode(fields if fields is not None else self.fields(order)).encode("utf-8")
@@ -87,7 +90,21 @@ class ECPayReturnTests(unittest.TestCase):
 
         request = Request({"type": "http", "method": "POST", "path": "/payments/ecpay/return",
                            "headers": [(b"content-type", content_type.encode("ascii"))]}, receive)
-        with patch("app.api.ecpay_return.get_session_factory", return_value=lambda: session):
+        def finish_grant(order_id):
+            # Payment transaction must be finished before the isolated grant.
+            self.assertTrue(session.closed)
+            self.assertEqual(order_id, order.id)
+            self.assertEqual(order.status, "paid")
+            self.assertIsNotNone(order.paid_at)
+            self.assertEqual(session.commits, 0 if was_paid else 1)
+            if grant_error is not None:
+                raise grant_error
+            return grant_result or GrantedEntitlement(uuid4(), order_id, "active")
+
+        was_paid = order is not None and order.status == "paid"
+        with patch("app.api.ecpay_return.get_session_factory", return_value=lambda: session), \
+             patch("app.api.ecpay_return.grant_paid_order", side_effect=finish_grant) as grant:
+            session.grant_mock = grant
             try:
                 return asyncio.run(receive_ecpay_stage_result(request)), session
             except HTTPException as error:
@@ -98,7 +115,7 @@ class ECPayReturnTests(unittest.TestCase):
         self.assertEqual(result.status_code, status)
         self.assertNotIn("internal", str(result.detail))
 
-    def test_authenticated_success_updates_only_order_payment_state_and_acks_exactly(self):
+    def test_authenticated_success_commits_paid_before_isolated_grant_and_ack(self):
         order = pending_order()
         result, session = self.send(order)
         self.assertEqual(result.status_code, 200)
@@ -111,9 +128,9 @@ class ECPayReturnTests(unittest.TestCase):
         self.assertEqual(order.provider_payment_type, "Credit_CreditCard")
         self.assertEqual(order.provider_paid_at.utcoffset(), timedelta(hours=8))
         self.assertIsNotNone(order.paid_at)
-        self.assertFalse(hasattr(order, "entitlement"))
+        session.grant_mock.assert_called_once_with(order.id)
 
-    def test_late_authenticated_success_preserves_original_expiry_without_entitlement(self):
+    def test_late_authenticated_success_preserves_original_expiry_before_grant(self):
         expiry = datetime.now(timezone.utc) - timedelta(hours=3)
         order = pending_order(status="expired", expires_at=expiry)
         result, session = self.send(order)
@@ -121,7 +138,7 @@ class ECPayReturnTests(unittest.TestCase):
         self.assertEqual(order.status, "paid")
         self.assertEqual(order.expires_at, expiry)
         self.assertEqual(session.commits, 1)
-        self.assertFalse(hasattr(order, "entitlement"))
+        session.grant_mock.assert_called_once_with(order.id)
 
         pending = pending_order(expires_at=expiry)
         result, _ = self.send(pending)
@@ -137,12 +154,14 @@ class ECPayReturnTests(unittest.TestCase):
         self.assertEqual(result.body, b"1|OK")
         self.assertEqual(session.commits, 0)
         self.assertEqual(order.paid_at, paid_at)
+        session.grant_mock.assert_called_once_with(order.id)
         for change in ({"TradeNo": "DIFFERENT"}, {"PaymentType": "ATM_ATM"},
                        {"PaymentDate": "2024/12/31 12:26:10"}):
             with self.subTest(change=change):
                 result, session = self.send(order, self.fields(order, **change))
                 self.assert_error(result, 409)
                 self.assertEqual(session.commits, 0)
+                session.grant_mock.assert_not_called()
 
     def test_bad_mac_or_merchant_or_amount_never_acknowledged(self):
         for change, status in (({"MerchantID": "other"}, 400), ({"TradeAmt": "1"}, 409)):
@@ -151,12 +170,14 @@ class ECPayReturnTests(unittest.TestCase):
             self.assert_error(result, status)
             self.assertEqual(session.commits, 0)
             self.assertEqual(order.status, "pending")
+            session.grant_mock.assert_not_called()
         order = pending_order()
         fields = self.fields(order)
         fields["TradeAmt"] = "1"  # Signed payload tampering.
         result, session = self.send(order, fields)
         self.assert_error(result, 403)
         self.assertEqual(session.commits, 0)
+        session.grant_mock.assert_not_called()
         result, _ = self.send(None, self.fields(order))
         self.assert_error(result, 409)
 
@@ -179,6 +200,7 @@ class ECPayReturnTests(unittest.TestCase):
         rejected, rejected_session = self.send(order, altered)
         self.assert_error(rejected, 403)
         self.assertEqual(rejected_session.commits, 0)
+        rejected_session.grant_mock.assert_not_called()
 
     def test_unverified_wrong_product_and_bad_states_rejected(self):
         for changes in ({"email_verified_at": None}, {"product_code": "other"},
@@ -189,6 +211,7 @@ class ECPayReturnTests(unittest.TestCase):
                 result, session = self.send(order)
                 self.assert_error(result, 409)
                 self.assertEqual(session.commits, 0)
+                session.grant_mock.assert_not_called()
 
     def test_simulation_and_failed_result_do_not_mark_paid(self):
         for changes in ({"SimulatePaid": "1"}, {"RtnCode": "10300066"}):
@@ -196,6 +219,7 @@ class ECPayReturnTests(unittest.TestCase):
             result, session = self.send(order, self.fields(order, **changes))
             self.assertEqual(result.body, b"1|OK")
             self.assertEqual(order.status, "pending")
+            session.grant_mock.assert_not_called()
             self.assertIsNone(order.paid_at)
             self.assertEqual(session.commits, 0)
 
@@ -213,11 +237,41 @@ class ECPayReturnTests(unittest.TestCase):
             result, _ = self.send(order, fields)
         self.assert_error(result, 503)
 
+    def test_failed_grant_preserves_paid_and_duplicate_can_retry(self):
+        order = pending_order()
+        fields = self.fields(order)
+        result, session = self.send(order, fields,
+            grant_error=EntitlementGrantUnavailable("isolated failure"))
+        self.assert_error(result, 503)
+        self.assertEqual(order.status, "paid")
+        self.assertEqual(session.commits, 1)
+        self.assertEqual(session.rollbacks, 0)
+        session.grant_mock.assert_called_once_with(order.id)
+        identity = (order.paid_at, order.provider_trade_no, order.provider_paid_at)
+        retried, retry_session = self.send(order, fields)
+        self.assertEqual(retried.body, b"1|OK")
+        self.assertEqual(retry_session.commits, 0)
+        self.assertEqual((order.paid_at, order.provider_trade_no, order.provider_paid_at), identity)
+        retry_session.grant_mock.assert_called_once_with(order.id)
+
+    def test_wrong_source_or_nonactive_grant_result_never_acknowledged(self):
+        for wrong_source, status in ((True, "active"), (False, "pending")):
+            with self.subTest(wrong_source=wrong_source, status=status):
+                order = pending_order()
+                result, session = self.send(order, grant_result=GrantedEntitlement(
+                    uuid4(), uuid4() if wrong_source else order.id, status))
+                self.assert_error(result, 503)
+                self.assertEqual(order.status, "paid")
+                self.assertEqual(session.commits, 1)
+                self.assertEqual(session.rollbacks, 0)
+                session.grant_mock.assert_called_once_with(order.id)
+
     def test_commit_failure_does_not_ack_and_rolls_back(self):
         order = pending_order()
         result, session = self.send(order, fail_commit=True)
         self.assert_error(result, 503)
         self.assertEqual(session.rollbacks, 1)
+        session.grant_mock.assert_not_called()
 
 
 if __name__ == "__main__":

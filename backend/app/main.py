@@ -1,17 +1,28 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from urllib.parse import urlsplit
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.orders import router as orders_router
 from app.api.checkout import router as checkout_router
 from app.api.ecpay_return import router as ecpay_return_router
+from app.api.access import router as access_router
 from app.database import get_engine
+from app.dev_frontend import dev_frontend_url
 
 
 app = FastAPI()
+frontend_url = dev_frontend_url()
+if frontend_url:
+    app.add_middleware(CORSMiddleware, allow_origins=[
+        f"{urlsplit(frontend_url).scheme}://{urlsplit(frontend_url).netloc}"
+    ], allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type", "X-Device-Id"],
+        allow_credentials=False)
 app.include_router(orders_router)
 app.include_router(checkout_router)
 app.include_router(ecpay_return_router)
+app.include_router(access_router)
 
 
 @app.get("/health")
