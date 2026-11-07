@@ -48,6 +48,33 @@ class ControlledE2EHttpTests(existing.ECPayHttpChainTests):
         self.client.headers.pop("X-EnSound-E2E-Key")
         self.assertEqual(self.callback(fields).text, "1|OK")
 
+    def test_resend_owner_without_explicit_opt_in_stays_blocked(self):
+        with patch.dict(os.environ, {"ENSOUND_DEV_E2E_EMAIL": "owner@example.com"}):
+            self.assertEqual(self.client.post("/orders", json={"email": "owner@example.com"}).status_code, 503)
+        self.delivery.assert_not_called()
+
+    def test_resend_owner_opt_in_requires_exact_mailbox_and_test_sender(self):
+        for changes in (
+            {"ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL": "other@example.com"},
+            {"RESEND_FROM_EMAIL": "support@example.com"},
+        ):
+            with patch.dict(os.environ, {"ENSOUND_DEV_E2E_EMAIL": "owner@example.com",
+                    "ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL": "owner@example.com",
+                    "RESEND_FROM_EMAIL": "onboarding@resend.dev", **changes}):
+                self.assertEqual(self.client.post("/orders", json={"email": "owner@example.com"}).status_code, 503)
+        self.delivery.assert_not_called()
+
+    def test_resend_owner_chain_preserves_mailbox_key_expiry_and_stage_guards(self):
+        self.email = "owner@example.com"
+        with patch.dict(os.environ, {"ENSOUND_DEV_E2E_EMAIL": self.email,
+                "ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL": self.email,
+                "RESEND_FROM_EMAIL": "onboarding@resend.dev"}):
+            self.assertEqual(self.client.post("/orders", json={"email": "other@example.com"}).status_code, 403)
+            self.assertEqual(self.client.post("/orders", json={"email": self.email},
+                headers={"X-EnSound-E2E-Key": ""}).status_code, 403)
+            self.test_expired_or_wrong_target_scope_fails_closed()
+            super().test_order_email_checkout_callback_claim_device_full_access()
+
     def test_callback_outside_mailbox_scope_cannot_mark_paid(self):
         order_id, fields = self.verified_checkout()
         with self.factory.begin() as session:

@@ -45,12 +45,20 @@ def configured_scope() -> DevE2EScope | None:
         now = datetime.now(timezone.utc)
         url = make_url(get_database_url())
         stage = get_stage_config()
+        # Resend's unverified testing sender delivers only to its account owner,
+        # whose address cannot contain a per-run alias. Opt in explicitly to
+        # that exact mailbox; all target, Stage, expiry and admission gates stay.
+        resend_owner = os.environ.get("ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL", "")
+        owner_scope = bool(resend_owner) and email == resend_owner and (
+            os.environ.get("RESEND_FROM_EMAIL") == "onboarding@resend.dev")
+        if resend_owner and not owner_scope:
+            raise ValueError()
         buyer_flag = os.environ.get("ENSOUND_DEV_E2E_BUYER_ENABLED", "0")
         if buyer_flag not in {"0", "1"} or (buyer_flag == "1" and not dev_frontend_url()):
             raise ValueError()
         if (not re.fullmatch(r"E2E-[a-zA-Z0-9]{12,32}", run_id)
                 or email != email.strip() or email.count("@") != 1 or len(email) > 254
-                or run_id.lower() not in email.split("@")[0].lower()
+                or not (run_id.lower() in email.split("@")[0].lower() or owner_scope)
                 or not re.fullmatch(r"[a-zA-Z0-9_-]{32,256}", key)
                 or expiry.tzinfo is None or not now < expiry <= now + timedelta(hours=24)
                 or os.environ.get("ENSOUND_DEV_DATABASE_HOST") != DEV_HOST
@@ -98,6 +106,13 @@ async def development_e2e_gate(request: Request, call_next):
         buyer = (scope.buyer and request.method == "POST" and
                  (request.url.path in buyer_paths or checkout) and
                  request.headers.get("Origin", "") in allowed_origins)
+        # The account-owner exception must not become a public mail trigger.
+        # Only the server-side operator can initiate this run's two emails;
+        # their one-use proofs still allow the real browser claim/device flow.
+        owner_mail_request = (bool(os.environ.get("ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL"))
+                              and request.url.path in {"/orders", "/access/email-links"})
+        if owner_mail_request and not operator:
+            return JSONResponse({"detail": "Development E2E operator required"}, status_code=403)
         if not operator and not buyer:
             return JSONResponse({"detail": "Development E2E operator required"}, status_code=403)
         if request.url.path in {"/orders", "/access/email-links", "/access/device-release/email-links"}:
