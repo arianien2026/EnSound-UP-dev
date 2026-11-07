@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import posthog from 'posthog-js'
+import { BuyerPanel } from './payment/BuyerPanel'
+import { useBuyer } from './payment/useBuyer'
+import { initialClaim } from './payment/bootstrap'
+const UI_PREVIEW = import.meta.env.DEV && import.meta.env.VITE_ENSOUND_UI_PREVIEW === '1' && ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).get('uiPreview') === '1' && !initialClaim
 import { lookupCmudictWord } from './pronunciation/cmudictLookup'
 import type { WordPronunciation } from './pronunciation/pronunciationTypes'
 
@@ -316,6 +320,7 @@ function DevAccessSwitch({
   accessLevel: 'free' | 'full'
   setAccessLevel: (level: 'free' | 'full') => void
 }) {
+  if (!UI_PREVIEW) return null
   return (
     <div
 style={{
@@ -369,11 +374,12 @@ style={{
 
 export default function App() {
 const [accessLevel, setAccessLevel] = useState<'free' | 'full'>('free')
-const isFull = accessLevel === 'full'
+const buyer = useBuyer(!UI_PREVIEW)
+const isFull = buyer.full || (UI_PREVIEW && accessLevel === 'full')
 type PaywallReason = 'repeat' | 'questions' | null
 
 const [paywallReason, setPaywallReason] = useState<PaywallReason>(null)
-  const [showProductInfo, setShowProductInfo] = useState(false)
+  const [showProductInfo, setShowProductInfo] = useState(Boolean(initialClaim) || Boolean(buyer.client.state.orderId))
   const [legalPage, setLegalPage] = useState<'terms' | 'refund' | 'privacy' | null>(null)
 
   const [freeUsage, setFreeUsage] = useState<FreeUsage>(() => {
@@ -512,7 +518,7 @@ function renderPaywall() {
           type="button"
           className="paywall-primary"
           onClick={() => {
-            // Payment flow will be connected later.
+            setShowProductInfo(true)
           }}
         >
           {t('解鎖完整版', 'Unlock Full')}
@@ -1078,7 +1084,7 @@ function nextChallengeQuestion() {
           </header>
           <MainNav active="lab" />
           <InAppBrowserNotice />
-          <ProductInfo />
+          {renderProductInfo()}
 
           <p className="eyebrow">Step 3D-2 · L1 Lab</p>
           <h1 className="contrast-title">Two Vowels</h1>
@@ -1250,7 +1256,7 @@ function nextChallengeQuestion() {
   }
 
 
-  function ProductInfo() {
+  function renderProductInfo() {
     if (!showProductInfo) return null
 
     return (
@@ -1276,6 +1282,8 @@ function nextChallengeQuestion() {
           onClick={(event) => event.stopPropagation()}
           style={{
             width: 'min(460px, 100%)',
+            maxHeight: 'calc(100dvh - 40px)',
+            overflowY: 'auto',
             padding: '24px',
             border: '1px solid #dbe5ff',
             borderRadius: '20px',
@@ -1304,7 +1312,7 @@ function nextChallengeQuestion() {
             {t('正式售價 ', 'Regular price ')}<strong>NT$199</strong>
           </p>
           <p style={{ margin: '0 0 12px' }}>
-            <strong>{t('首發限量 50 份 NT$99', 'Launch offer · first 50 purchases NT$99')}</strong>
+            <strong>{t('實際金額以建立的訂單為準', 'Final price is shown in your order')}</strong>
           </p>
           <p style={{ margin: '0 0 18px' }}>
             {t(
@@ -1343,6 +1351,8 @@ function nextChallengeQuestion() {
             </p>
           </div>
 
+          {!UI_PREVIEW && <BuyerPanel client={buyer.client} />}
+          {UI_PREVIEW && <p>僅 UI 預覽，不代表付款授權 / UI preview only, no payment entitlement</p>}
           <p style={{ margin: 0, fontSize: '0.92rem' }}>
             {t('客服：', 'Support: ')}
             <a href="mailto:uptools.support@gmail.com">uptools.support@gmail.com</a>
@@ -1673,7 +1683,7 @@ function nextChallengeQuestion() {
           </header>
           <MainNav active="choose2" />
           <InAppBrowserNotice />
-          <ProductInfo />
+          {renderProductInfo()}
 
           <p className="eyebrow">{t('自由選 2 音','Choose 2')}</p>
           <h1 className="contrast-title">{t('請點選任 2 個音標練習','Pick two vowel sounds')}</h1>
@@ -2054,7 +2064,7 @@ if (chooseQuestion >= 5) {
                 </div>
               </div><p className="tagline">{t('找出你最需要加強的母音組合。', 'Find which vowel contrasts need more practice.')}</p></div></header>
       <MainNav active="level2" />
-          <ProductInfo />
+          {renderProductInfo()}
 
       {!diagStarted&&!done&&<div className="diagnostic-intro"><p className="eyebrow">{t('母音測驗 · 診斷','Vowel Test · Diagnostic')}</p><h1 className="contrast-title">{t('10 題隨機聽力測驗', '10 random listening questions')}</h1><p className="contrast-subtitle"></p><div className="diagnostic-frame">{t('15 個母音 · 10 題聽力測驗', '15 vowel sounds · 10 questions')}</div><button className="start-challenge-button" onClick={startDiagnostic}>{t('開始 10 題測驗 →', 'Start 10-Question Test →')}</button></div>}
 
@@ -2201,7 +2211,7 @@ if (chooseQuestion >= 5) {
           </header>
           <MainNav active="guided" />
           <InAppBrowserNotice />
-          <ProductInfo />
+          {renderProductInfo()}
 
           {contrastPhase === 'learn' && (
             <>
@@ -2514,7 +2524,7 @@ if (chooseQuestion >= 5) {
         <button className="secondary-test-button" onClick={startConsonantTest}>{t('再測 10 題 →', 'Retry Test →')}</button>
         {paywallReason === 'questions' && renderPaywall()}
       </div>}
-    </section><SiteFooter /></main>
+    </section>{renderProductInfo()}<SiteFooter /></main>
   }
 
   if (screen === 'consonant') {
@@ -2545,7 +2555,7 @@ if (chooseQuestion >= 5) {
           </header>
           <MainNav active="consonant" />
           <InAppBrowserNotice />
-          <ProductInfo />
+          {renderProductInfo()}
 
           <p className="eyebrow">/{consonantSounds[0].sound}/ ↔ /{consonantSounds[1].sound}/</p>
           <h1 className="contrast-title">{t('子音練習', 'Consonant Practice')}</h1>
@@ -2735,7 +2745,7 @@ if (chooseQuestion >= 5) {
           </header>
           <MainNav active="vowelBasics" />
           <InAppBrowserNotice />
-          <ProductInfo />
+          {renderProductInfo()}
 
           <p className="eyebrow">{t('母音核心說明', 'Vowel Basics')}</p>
           <h1 className="sound-map-title">{t('一個字母，不只有一種發音。', 'One letter can have more than one sound.')}</h1>
@@ -2826,7 +2836,7 @@ if (chooseQuestion >= 5) {
           </header>
           <MainNav active="vowel" />
           <InAppBrowserNotice />
-          <ProductInfo />
+          {renderProductInfo()}
 
           <p className="eyebrow">{t(`${selectedSoundLetter} 發音對照`, `${selectedSoundLetter} Sound Map`)}</p>
           <h1 className="sound-map-title">{t(`字母「${selectedSoundLetter}」的發音是怎樣的？`, `How can “${selectedSoundLetter}” sound?`)}</h1>
@@ -2936,7 +2946,7 @@ if (chooseQuestion >= 5) {
         <section className="input-section">
           <MainNav active="sentence" />
           <InAppBrowserNotice />
-          <ProductInfo />
+          {renderProductInfo()}
 
           <label htmlFor="sentence" className="section-label">{t('請輸入您想要練習的單字或者是句子：','Type a word or sentence you want to practice:')}</label>
           <textarea

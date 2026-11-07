@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import get_session_factory
+from app.dev_e2e import require_scoped_email
 from app.models import Entitlement, Order
 from app.services.pricing import PRODUCT_CODE
 
@@ -56,6 +57,7 @@ def _eligible_order(session: Session, order_id: UUID) -> Order:
         or order.provider_paid_at is None
     ):
         raise IneligibleEntitlementOrder("Order is not a verified paid Stage order")
+    require_scoped_email(order.entitlement_email)
     return order
 
 

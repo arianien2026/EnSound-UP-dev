@@ -7,7 +7,7 @@ from contextlib import redirect_stdout, redirect_stderr
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-from app.reconcile_cli import CONFIRMATION, main
+from app.reconcile_cli import CONFIRMATION, main, _validate_target
 from app.services.entitlement_reconcile import (
     ReconciliationResult, RecoveryPermit, _issue_recovery_permit, reconcile_order_ids,
 )
@@ -144,6 +144,29 @@ class ReconciliationCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("mode=dry-run", output)
         grant.assert_not_called()
+
+
+class NeonRecoveryTargetTests(unittest.TestCase):
+    def allowed(self, query="", port=""):
+        host = "ep-synthetic.c-14.us-east-1.aws.neon.tech"
+        with patch.dict(os.environ, {
+            "DATABASE_URL": f"postgresql://synthetic:dummy@{host}{port}/neondb{query}",
+            "ENSOUND_RECONCILE_ALLOWED_HOST": host,
+            "ENSOUND_RECONCILE_ALLOWED_PORT": "5432",
+            "ENSOUND_RECONCILE_ALLOWED_DATABASE": "neondb",
+            "ENSOUND_RECONCILE_ALLOWED_SCHEMA": "public",
+        }, clear=True):
+            return _validate_target("neondb")
+
+    def test_normalized_neon_tls_with_default_or_explicit_port_is_permitted(self):
+        self.assertTrue(self.allowed())
+        self.assertTrue(self.allowed("?sslmode=verify-full&sslrootcert=system", ":5432"))
+
+    def test_arbitrary_options_and_wrong_port_still_rejected(self):
+        for query in ("?options=-csearch_path%3Dother", "?host=other.invalid", "?application_name=extra"):
+            with self.subTest(query=query):
+                self.assertFalse(self.allowed(query))
+        self.assertFalse(self.allowed(port=":55432"))
 
 
 class RecoveryPermitGuardTests(unittest.TestCase):

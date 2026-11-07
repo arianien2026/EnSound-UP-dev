@@ -181,7 +181,17 @@ def main() -> int:
                         help="Count existing rows without requiring zero; never writes data")
     parser.add_argument("--require-read-only-default", action="store_true",
                         help="Refuse startup unless default_transaction_read_only is on")
+    parser.add_argument("--controlled-e2e", action="store_true",
+                        help="Require a valid expiring operator/mailbox scope instead of read-only startup")
     args = parser.parse_args()
+    if args.controlled_e2e:
+        from app.dev_e2e import configured_scope
+        try:
+            if args.require_read_only_default or configured_scope() is None:
+                raise ValueError()
+        except Exception:
+            print(json.dumps({"status": "PARTIAL", "error_code": "E2E_SCOPE_UNAVAILABLE"}))
+            return 2
     result = probe(args.expected_host, args.expected_database,
                    require_empty=not args.allow_existing_business_rows,
                    require_read_only_default=args.require_read_only_default)

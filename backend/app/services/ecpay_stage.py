@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from app.models import Order
 from app.services.pricing import PRODUCT_CODE
+from app.dev_frontend import dev_frontend_url
 
 
 STAGE_CHECKOUT_URL = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5"
@@ -94,5 +95,8 @@ def checkout_fields(order: Order, trade_no: str, now: datetime, config: StageCon
         "ChoosePayment": "ALL",
         "EncryptType": "1",
     }
+    destination = dev_frontend_url()
+    if destination:
+        fields["ClientBackURL"] = destination  # Navigation only, never payment proof.
     fields["CheckMacValue"] = check_mac_value(fields, config)
     return fields

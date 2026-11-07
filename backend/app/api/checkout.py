@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import get_session_factory
+from app.dev_e2e import require_scoped_email
 from app.models import Order
 from app.services.ecpay_stage import (
     STAGE_CHECKOUT_URL,
@@ -49,6 +50,7 @@ def create_stage_checkout(
                 now = datetime.now(timezone.utc)
                 if not is_payment_eligible(order, now):
                     raise HTTPException(status_code=409, detail="Order is not eligible for checkout")
+                require_scoped_email(order.entitlement_email)
                 trade_no = order.provider_order_id or merchant_trade_no(order)
                 fields = checkout_fields(order, trade_no, now, config)
                 if order.provider_order_id is None:

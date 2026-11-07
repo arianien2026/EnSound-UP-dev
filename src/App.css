@@ -1959,3 +1959,9 @@ footer {
   .legal-modal-header { padding: 18px 18px 14px; }
   .legal-modal-body { padding: 17px 18px 22px; }
 }
+
+.buyer-panel { text-align:left; margin:16px 0; padding:16px; background:#f7f9ff; border-radius:14px; }
+.buyer-panel label { display:block; margin:10px 0; }
+.buyer-panel input { display:block; width:100%; box-sizing:border-box; padding:9px; margin-top:5px; }
+.buyer-panel button { margin:5px 5px 5px 0; padding:8px 12px; border:1px solid #dbe5ff; border-radius:9px; cursor:pointer; }
+.buyer-panel button:disabled { opacity:.5; cursor:default; }

@@ -29,6 +29,7 @@ from test_ecpay_checkout import STAGE_ENV
 
 
 class ECPayHttpChainTests(unittest.TestCase):
+    email = "synthetic@example.com"
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -64,7 +65,7 @@ class ECPayHttpChainTests(unittest.TestCase):
         return re.search(r"#token=([A-Za-z0-9_-]{43})", text).group(1)
 
     def new_order(self):
-        response = self.client.post("/orders", json={"email": "synthetic@example.com"})
+        response = self.client.post("/orders", json={"email": self.email})
         self.assertEqual(response.status_code, 201, response.text)
         data = response.json()
         self.assertEqual((data["amount"], data["status"]), (199, "pending"))
@@ -93,7 +94,7 @@ class ECPayHttpChainTests(unittest.TestCase):
         return self.client.post("/payments/ecpay/return", data=payload)
 
     def activate(self):
-        response = self.client.post("/access/email-links", json={"email": "synthetic@example.com"})
+        response = self.client.post("/access/email-links", json={"email": self.email})
         self.assertEqual(response.status_code, 202, response.text)
         token = self.delivered_token()
         redeemed = self.client.post("/access/email-links/redeem", json={"token": token})

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Order
+from app.dev_e2e import require_scoped_email
 
 
 VERIFICATION_LIFETIME = timedelta(minutes=30)
@@ -44,6 +45,7 @@ def consume_verification_token(session: Session, token: str, now: datetime) -> b
         or order.email_verification_expires_at <= now
     ):
         return False
+    require_scoped_email(order.entitlement_email)
     order.email_verified_at = now
     order.email_verification_token_hash = None
     order.email_verification_expires_at = None

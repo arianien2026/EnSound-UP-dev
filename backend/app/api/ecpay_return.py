@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import get_session_factory
+from app.dev_e2e import require_scoped_email
 from app.models import Order
 from app.services.ecpay_stage import check_mac_value, get_stage_config
 from app.services.entitlement_grant import (
@@ -92,6 +93,7 @@ async def receive_ecpay_stage_result(request: Request) -> Response:
                     raise HTTPException(status_code=409, detail="Payment notification does not match order")
 
                 if success:
+                    require_scoped_email(order.entitlement_email)
                     # Keep a plain UUID: the ORM row expires when its session closes.
                     order_id = order.id
                     trade_no, payment_type, provider_paid_at = paid_details

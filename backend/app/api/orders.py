@@ -7,6 +7,11 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import get_session_factory
+from app.dev_e2e import require_scoped_email
+from app.dev_e2e import configured_scope
+from app.services.email_claim import _count_request, _rate_key, get_rate_limit_key
+from app.dev_frontend import dev_frontend_url
+from html import escape
 from app.models import Order
 from app.services.email_delivery import (
     EmailDeliveryError,
@@ -51,6 +56,7 @@ class VerifyEmailRequest(BaseModel):
 
 @router.post("/orders", response_model=CreateOrderResponse, status_code=201)
 def create_order(request: CreateOrderRequest) -> CreateOrderResponse:
+    require_scoped_email(str(request.email))
     try:
         email_config = get_email_config()
     except EmailDeliveryError:
@@ -74,6 +80,10 @@ def create_order(request: CreateOrderRequest) -> CreateOrderResponse:
         with get_session_factory()() as session:
             try:
                 session.add(order)
+                scope = configured_scope()
+                if scope and scope.buyer and not _count_request(session,
+                    _rate_key(get_rate_limit_key(), "buyer_order", scope.email), created_at, 3):
+                    raise HTTPException(status_code=429, detail="Try again later")
                 session.flush()
                 response = CreateOrderResponse(
                     order_id=order.id,
@@ -100,11 +110,29 @@ def create_order(request: CreateOrderRequest) -> CreateOrderResponse:
     return response
 
 
+@router.get("/orders/{order_id}/status")
+def order_status(order_id: UUID) -> Response:
+    from fastapi.responses import JSONResponse
+    try:
+        with get_session_factory()() as session:
+            order = session.get(Order, order_id)
+            if order is None:
+                raise HTTPException(status_code=404, detail="Order unavailable")
+            require_scoped_email(order.entitlement_email)
+            now = datetime.now(timezone.utc)
+            expiry = order.expires_at if order.expires_at.tzinfo else order.expires_at.replace(tzinfo=timezone.utc)
+            status = "expired" if order.status == "pending" and expiry <= now else order.status
+            return JSONResponse({"status": status, "email_verified": order.email_verified_at is not None},
+                                headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+    except (SQLAlchemyError, RuntimeError, ValueError):
+        raise HTTPException(status_code=503, detail="Order status unavailable") from None
+
+
 _VERIFY_PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <title>EnSound UP email verification</title></head><body>
 <main><h1>EnSound UP</h1><p id="result-zh">正在驗證 Email...</p>
 <p id="result-zh-detail" hidden></p><p id="result-en" lang="en">Verifying your email...</p></main>
-<script src="/orders/verify-email.js" defer></script></body></html>"""
+__RETURN_LINK__<script src="/orders/verify-email.js" defer></script></body></html>"""
 
 _VERIFY_SCRIPT = """(async () => {
   const token = new URLSearchParams(location.hash.slice(1)).get('token');
@@ -146,7 +174,13 @@ _PAGE_HEADERS = {
 
 @router.get("/orders/verify-email", response_class=HTMLResponse)
 def verification_page() -> HTMLResponse:
-    return HTMLResponse(_VERIFY_PAGE, headers=_PAGE_HEADERS)
+    try:
+        destination = dev_frontend_url()
+    except ValueError:
+        destination = None
+    link = (f'<p><a href="{escape(destination, quote=True)}">返回 EnSound UP / Return to EnSound UP</a></p>'
+            if destination else "")
+    return HTMLResponse(_VERIFY_PAGE.replace("__RETURN_LINK__", link), headers=_PAGE_HEADERS)
 
 
 @router.get("/orders/verify-email.js")

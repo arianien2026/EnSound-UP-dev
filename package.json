@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:buyer": "node tests/frontend/run.mjs"
   },
   "dependencies": {
     "@posthog/react": "^1.11.1",

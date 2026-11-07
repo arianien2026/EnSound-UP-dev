@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models import EmailClaimRateLimit, EmailClaimSession, EmailClaimToken, Entitlement, Order
 from app.services.entitlement_grant import IneligibleEntitlementOrder, _eligible_order
+from app.dev_e2e import require_scoped_email
 
 
 CLAIM_LIFETIME = timedelta(minutes=15)
@@ -121,6 +122,7 @@ def redeem_claim(session: Session, token: str, now: datetime) -> str | None:
     ).with_for_update().execution_options(populate_existing=True)).scalar_one_or_none()
     if entitlement is None or entitlement.status != "active":
         return None
+    require_scoped_email(entitlement.entitlement_email)
     if (order is None or order.status not in ("paid", "refund_pending") or
             order.email_verified_at is None):
         return None

@@ -40,14 +40,22 @@ def _validate_target(expected_database: str) -> bool:
         return False
     try:
         url = make_url(get_database_url())
-        # No URL-specified connection options, including search_path or multi-host.
-        if url.drivername != "postgresql+psycopg" or url.query:
+        # Neon normalization inserts verified TLS options. Permit only those;
+        # connection target overrides and arbitrary libpq options remain forbidden.
+        if url.drivername != "postgresql+psycopg":
             return False
-        if not url.host or url.port is None or not url.database:
+        neon = bool(url.host and url.host.endswith(".neon.tech"))
+        if url.query and not (neon and set(url.query) <= {"sslmode", "sslrootcert"}
+                             and url.query.get("sslmode") == "verify-full"
+                             and isinstance(url.query.get("sslrootcert"), str)
+                             and url.query["sslrootcert"].strip()):
+            return False
+        effective_port = url.port if url.port is not None else (5432 if neon else None)
+        if not url.host or effective_port is None or not url.database:
             return False
         if url.host.casefold() != allowed_host.casefold():
             return False
-        if url.port != port or url.database != allowed_database:
+        if effective_port != port or url.database != allowed_database:
             return False
     except (ValueError, TypeError, RuntimeError, OverflowError):
         return False

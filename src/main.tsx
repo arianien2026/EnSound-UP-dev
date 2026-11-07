@@ -1,4 +1,5 @@
-﻿import { StrictMode } from 'react'
+﻿import './payment/bootstrap'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import './App.css'

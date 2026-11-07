@@ -7,3 +7,6 @@ dist/
 __pycache__/
 *.py[cod]
 .venv/
+
+# Local buyer integration-test compilation
+.buyer-test/
