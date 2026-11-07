@@ -30,6 +30,26 @@ beforeEach(async()=>{({email}=await fixture('reset',{}))})
 afterEach(()=>{clients.forEach(c=>c.dispose());clients=[]})
 after(async()=>{if(child && child.exitCode === null){const ended=once(child,'exit');child.kill('SIGTERM');await ended}})
 
+test('browser-native fetch keeps its Window receiver during device activation',async()=>{
+ const originalFetch=globalThis.fetch
+ const requests=[]
+ globalThis.fetch=function(url,init){
+  assert.equal(this,globalThis,'Native browser fetch requires its global receiver')
+  requests.push(new URL(url).pathname)
+  const body=String(url).endsWith('/access/devices')
+   ? {device_credential:'c'.repeat(43),credential_expires_at:new Date(Date.now()+60000).toISOString()}
+   : {status:'active',product_code:PRODUCT,credential_expires_at:new Date(Date.now()+60000).toISOString()}
+  return Promise.resolve(new Response(JSON.stringify(body),{status:200,headers:{'Content-Type':'application/json'}}))
+ }
+ try {
+  const c=new BuyerClient(base,storage())
+  clients.push(c)
+  await c.start('p'.repeat(43))
+  assert.deepEqual(requests,['/access/devices','/access/status'])
+  assert.equal(c.state.full,true)
+ } finally {globalThis.fetch=originalFetch}
+})
+
 test('buyer order → verify email → Stage fields → paid → email claim → device → backend FULL; duplicate callback is idempotent',async()=>{
  const c=client();await c.start();assert.equal(c.state.full,false)
  await c.createOrder(email,'different@example.com');assert.equal((await fixture('counts')).orders,0)

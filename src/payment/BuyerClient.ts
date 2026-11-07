@@ -41,7 +41,8 @@ export class BuyerClient {
   private write(key: string, value: string) { this.store.setItem(key, value) }
   private remove(key: string) { try { this.store.removeItem(key) } catch { /* remain FREE */ } }
   private async request(path: string, body?: unknown, headers?: Record<string, string>) {
-    const response = await this.fetcher(this.base + path, { method: body === undefined ? 'GET' : 'POST',
+    // Native browser fetch must receive Window, not the BuyerClient instance.
+    const response = await this.fetcher.call(globalThis, this.base + path, { method: body === undefined ? 'GET' : 'POST',
       cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer',
       headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(10000) })
