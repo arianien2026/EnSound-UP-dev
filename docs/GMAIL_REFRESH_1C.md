@@ -67,3 +67,25 @@ PASS proves the current Render refresh token worked at the test time. It does
 not prove immortality or retroactive extension of a Testing-issued token. A
 format-valid Access Token is not a paid entitlement. Long-term reliability
 remains PARTIAL; no token replacement is justified solely by uncertainty.
+
+## Actual runtime result — 2026-11-08 Asia/Taipei
+
+Validation code commit: c6b19ab551e408e638b130702d55c711d10af10e.
+Validation deployment: dep-dbo61mgu01pc73ebtjtg, live.
+Public one-boot approval commit: 4a183a1c246022510fec1974c16c408a76794ec9.
+Temporary code suite: 199 total / 198 passed / 1 skipped; 15 focused security tests.
+Exactly one safe result event: Refresh PASS, HTTP 200, refresh_attempts=1,
+access_token_format_valid=true, error_type=null. No OAuth response or token was
+recorded; no send endpoint was called. Private signing process terminated before
+approval publication; no private signing key was persisted.
+
+Current Render Refresh Token is VALID at test time. No reauthorization,
+revocation, client replacement or Gmail Secret change was performed. Publishing
+Status In production is accepted from the user's confirmed Console screenshot.
+Long-term reliability remains PARTIAL: this test does not establish permanent
+validity or retroactive extension of the original Testing-issued credential.
+
+Cleanup removes public approval, the temporary probe/issuer/test module and
+crypto dependency, restores main.py/requirements.txt byte-for-byte to baseline,
+and removes all four temporary environment settings via Dashboard Save only.
+Only this non-sensitive execution document remains relative to initial HEAD.
