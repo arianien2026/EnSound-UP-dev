@@ -34,6 +34,22 @@ class ControlledE2EHttpTests(existing.ECPayHttpChainTests):
             f"postgresql+psycopg://synthetic:dummy@{DEV_HOST}/neondb?sslmode=verify-full&sslrootcert=system")))
         self.client.headers["X-EnSound-E2E-Key"] = self.key
 
+    def test_gmail_fixed_mailbox_requires_sender_pin_and_operator(self):
+        env = {"EMAIL_TRANSPORT":"gmail_api", "GMAIL_FROM_EMAIL":"uptools.support@gmail.com",
+               "ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL":"uptools.support@gmail.com",
+               "ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL":"uptools.support@gmail.com",
+               "ENSOUND_DEV_E2E_EMAIL":"uptools.support@gmail.com"}
+        with patch.dict(os.environ, env):
+            self.assertEqual(configured_scope().email,"uptools.support@gmail.com")
+            self.assertEqual(self.client.post("/access/email-links",json={"email":"other@example.com"}).status_code,403)
+            self.assertEqual(self.client.post("/access/email-links",json={"email":"uptools.support@gmail.com"},headers={"X-EnSound-E2E-Key":""}).status_code,403)
+            for name in ("ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL","ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL"):
+                with patch.dict(os.environ,{name:""}):
+                    with self.assertRaises(ValueError): configured_scope()
+            with patch.dict(os.environ,{"GMAIL_FROM_EMAIL":"other@gmail.com"}):
+                with self.assertRaises(ValueError): configured_scope()
+        self.delivery.assert_not_called()
+
     def test_unkeyed_or_wrong_mailbox_requests_write_nothing(self):
         self.assertEqual(self.client.post("/orders", json={"email": self.email},
                          headers={"X-EnSound-E2E-Key": ""}).status_code, 403)
@@ -74,6 +90,31 @@ class ControlledE2EHttpTests(existing.ECPayHttpChainTests):
                 headers={"X-EnSound-E2E-Key": ""}).status_code, 403)
             self.test_expired_or_wrong_target_scope_fails_closed()
             super().test_order_email_checkout_callback_claim_device_full_access()
+
+    def test_domain_sender_requires_exact_explicit_sender_and_fixed_mailbox(self):
+        baseline = {"ENSOUND_DEV_E2E_EMAIL": "owner@example.com",
+                    "ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL": "owner@example.com",
+                    "RESEND_FROM_EMAIL": "access@mail.example.com",
+                    "ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL": "access@mail.example.com"}
+        with patch.dict(os.environ, baseline):
+            self.assertEqual(configured_scope().email, "owner@example.com")
+        for change in (
+            {"ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL": ""},
+            {"ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL": "other@mail.example.com"},
+            {"ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL": "invalid-sender"},
+            {"ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL": ""},
+            {"ENSOUND_DEV_E2E_EMAIL": "other@example.com"},
+            {"ENSOUND_DEV_E2E_KEY": ""},
+            {"ENSOUND_DEV_E2E_EXPIRES_AT": "2000-01-01T00:00:00+00:00"},
+            {"ENSOUND_DEV_DATABASE_HOST": "other.invalid"},
+            {"ECPAY_STAGE_MERCHANT_ID": "9999999"},
+            {"RESEND_FROM_EMAIL": "onboarding@resend.dev",
+             "ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL": "onboarding@resend.dev"},
+        ):
+            with self.subTest(change=list(change)), patch.dict(os.environ, {**baseline, **change}):
+                with self.assertRaises(ValueError):
+                    configured_scope()
+        self.delivery.assert_not_called()
 
     def test_callback_outside_mailbox_scope_cannot_mark_paid(self):
         order_id, fields = self.verified_checkout()

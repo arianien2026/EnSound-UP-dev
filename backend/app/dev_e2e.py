@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.engine import make_url
+from email_validator import validate_email
 
 from app.database import get_database_url
 from app.services.ecpay_stage import get_stage_config
@@ -45,12 +46,24 @@ def configured_scope() -> DevE2EScope | None:
         now = datetime.now(timezone.utc)
         url = make_url(get_database_url())
         stage = get_stage_config()
-        # Resend's unverified testing sender delivers only to its account owner,
-        # whose address cannot contain a per-run alias. Opt in explicitly to
-        # that exact mailbox; all target, Stage, expiry and admission gates stay.
+        # A fixed test mailbox cannot contain a per-run alias. Keep its exact
+        # opt-in when moving from Resend's sandbox to an approved domain sender.
+        # Provider domain verification is a separate release prerequisite;
+        # this setting is an exact sender pin, not proof of DNS ownership.
         resend_owner = os.environ.get("ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL", "")
+        approved_sender = os.environ.get("ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL", "")
+        sender = os.environ.get("GMAIL_FROM_EMAIL" if os.environ.get("EMAIL_TRANSPORT", "resend") == "gmail_api" else "RESEND_FROM_EMAIL", "")
+        if approved_sender:
+            validate_email(approved_sender, check_deliverability=False)
+            domain = approved_sender.rsplit("@", 1)[1].lower()
+            if (approved_sender != approved_sender.strip() or sender != approved_sender
+                    or not resend_owner or email != resend_owner
+                    or domain == "resend.dev" or domain.endswith(".resend.dev")):
+                raise ValueError()
+        if os.environ.get("EMAIL_TRANSPORT", "resend") == "gmail_api" and (not approved_sender or not resend_owner):
+            raise ValueError()
         owner_scope = bool(resend_owner) and email == resend_owner and (
-            os.environ.get("RESEND_FROM_EMAIL") == "onboarding@resend.dev")
+            bool(approved_sender) or sender == "onboarding@resend.dev")
         if resend_owner and not owner_scope:
             raise ValueError()
         buyer_flag = os.environ.get("ENSOUND_DEV_E2E_BUYER_ENABLED", "0")

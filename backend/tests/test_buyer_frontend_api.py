@@ -62,6 +62,27 @@ class BuyerHttpTests(controlled.existing.ECPayHttpChainTests):
             with patch.object(self.client, 'post', side_effect=scoped_post):
                 self.test_order_email_checkout_callback_claim_device_full_access()
 
+    def test_approved_domain_sender_keeps_mail_initiation_operator_only(self):
+        self.email = 'owner@example.com'
+        with patch.dict(os.environ, {'ENSOUND_DEV_E2E_EMAIL': self.email,
+                'ENSOUND_DEV_E2E_RESEND_OWNER_EMAIL': self.email,
+                'RESEND_FROM_EMAIL': 'access@mail.example.com',
+                'ENSOUND_DEV_E2E_APPROVED_FROM_EMAIL': 'access@mail.example.com'}):
+            for path in ('/orders', '/access/email-links'):
+                self.assertEqual(self.client.post(path, json={'email': self.email}).status_code, 403)
+                self.assertEqual(self.client.post(path, json={'email': 'other@example.com'},
+                    headers={'X-EnSound-E2E-Key': self.key}).status_code, 403)
+            self.delivery.assert_not_called()
+            original_post = self.client.post
+            def scoped_post(path, *args, **kwargs):
+                if path in ('/orders', '/access/email-links'):
+                    kwargs['headers'] = {**kwargs.get('headers', {}), 'X-EnSound-E2E-Key': self.key}
+                return original_post(path, *args, **kwargs)
+            with patch.object(self.client, 'post', side_effect=scoped_post):
+                self.test_order_email_checkout_callback_claim_device_full_access()
+            self.assertTrue(all(call.args[0]['from'] == 'access@mail.example.com'
+                                for call in self.delivery.call_args_list))
+
     def test_buyer_order_status_is_minimal_and_never_proof_of_full_access(self):
         order_id, token = self.new_order()
         status = self.client.get(f'/orders/{order_id}/status')
