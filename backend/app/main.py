@@ -13,7 +13,10 @@ from app.dev_frontend import dev_frontend_url
 from app.dev_e2e import development_e2e_gate
 
 
+from app.dev_refresh_probe import probe as refresh_probe
+
 app = FastAPI()
+refresh_probe.start()
 app.middleware("http")(development_e2e_gate)
 frontend_url = dev_frontend_url()
 if frontend_url:
