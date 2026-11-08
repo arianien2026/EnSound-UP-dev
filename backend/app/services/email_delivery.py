@@ -12,10 +12,7 @@ from email_validator import EmailNotValidError, validate_email
 
 
 class EmailDeliveryError(Exception):
-    def __init__(self, message="Email delivery unavailable", *, phase="configuration", http_status=None):
-        super().__init__(message)
-        self.phase = phase
-        self.http_status = http_status
+    pass
 
 
 @dataclass(frozen=True, repr=False)
@@ -126,7 +123,8 @@ def _deliver(payload: dict, config: EmailConfig) -> None:
     except (ValueError, EmailNotValidError, KeyError, IndexError, TypeError):
         raise EmailDeliveryError("Email delivery unavailable") from None
     if config.transport == "gmail_api":
-        return _deliver_gmail(payload, config)
+        _deliver_gmail(payload, config)
+        return
     if config.transport != "resend":
         raise EmailDeliveryError("Email delivery unavailable")
     request = Request(
@@ -154,7 +152,6 @@ def _deliver_gmail(payload: dict, config: EmailConfig) -> None:
     Access tokens live only for this invocation. Existing database-backed claim
     cooldowns and one-use proofs remain authoritative, including across restarts.
     """
-    phase = "oauth_refresh"
     try:
         refresh = Request("https://oauth2.googleapis.com/token", data=urlencode({
             "client_id": config.client_id, "client_secret": config.client_secret,
@@ -177,14 +174,11 @@ def _deliver_gmail(payload: dict, config: EmailConfig) -> None:
                           data=json.dumps({"raw": raw}).encode("utf-8"),
                           headers={"Authorization": "Bearer " + access,
                                    "Content-Type": "application/json"}, method="POST")
-        phase = "gmail_send"
         with urlopen(request, timeout=10) as response:
-            status = response.status if hasattr(response, "status") else 200
             result = json.load(response)
         if not isinstance(result, dict) or not isinstance(result.get("id"), str) or not result["id"]:
             raise ValueError()
-        return {"http_status": status, "message_id": result["id"]}
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, TypeError, AttributeError) as error:
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError, TypeError, AttributeError):
         # Do not include provider bodies, OAuth secrets or message proofs.
         # No fallback to another provider: delivery may already have occurred.
-        raise EmailDeliveryError(phase=phase, http_status=error.code if isinstance(error, HTTPError) else None) from None
+        raise EmailDeliveryError("Email delivery unavailable") from None

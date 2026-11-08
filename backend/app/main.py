@@ -13,8 +13,6 @@ from app.dev_frontend import dev_frontend_url
 from app.dev_e2e import development_e2e_gate
 
 
-from app.api.dev_gmail_smoke import router as gmail_smoke_router
-
 app = FastAPI()
 app.middleware("http")(development_e2e_gate)
 frontend_url = dev_frontend_url()
@@ -27,7 +25,6 @@ app.include_router(orders_router)
 app.include_router(checkout_router)
 app.include_router(ecpay_return_router)
 app.include_router(access_router)
-app.include_router(gmail_smoke_router)
 
 
 @app.get("/health")

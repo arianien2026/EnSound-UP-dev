@@ -60,3 +60,20 @@ Default disabled; wrong key/target/expiry; arbitrary recipient/content rejected;
 concurrent replay; replay on a new boot; failed attempt consumed; exact fixed
 content; HTTP status redaction; isolated issuer process exit with no private-key
 file; no database/payment/token-issuer imports; existing mail regression suite.
+
+## Actual execution — 2026-11-08 Asia/Taipei
+
+Test release commit: c335e58a07a47aa18f52a556ba67df8f6065c735.
+Test deployment: dep-dbo3oljrjlhs73abc9ig, live.
+Full test release suite: 195 total / 194 passed / 1 skipped.
+Exactly one controller POST; issuer process exited before POST; no retry.
+Gmail send HTTP 200; SEND_PASS; send_attempts=1.
+Gmail Message ID: 1a1ba6df13bf395e.
+Recipient: **uptools.support@gmail.com**.
+Subject: EnSound UP Development Gmail Test.
+Inbox receipt requires the user's separate confirmation.
+No order/claim/entitlement/device/payment API was called.
+Cleanup restores the three modified runtime files byte-for-byte to baseline and
+deletes temporary router, issuer and test module; only this evidence document
+remains. Temporary verification key and activation settings are removed via
+Render Dashboard Save only, preserving all existing OAuth secrets.
