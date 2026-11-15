@@ -35,6 +35,39 @@ class ReleaseSafetyTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(RuntimeError):
                 check_neon_readonly.verify_driver_security(self.driver(**kwargs), HOST, "neondb")
 
+    def test_readonly_probe_accepts_postgresql_18_patch_upgrades(self):
+        cases = (
+            ("neondb", "180006", "on", "on", "PASS"),
+            ("neondb", "180007", "on", "on", "PASS"),
+            ("neondb", "180008", "on", "on", "PASS"),
+            ("neondb", "180005", "on", "on", "PARTIAL"),
+            ("neondb", "190000", "on", "on", "PARTIAL"),
+            ("neondb", "invalid", "on", "on", "PARTIAL"),
+            ("wrong", "180007", "on", "on", "PARTIAL"),
+            ("neondb", "180007", "off", "on", "PARTIAL"),
+            ("neondb", "180007", "on", "off", "PARTIAL"),
+        )
+        for database, version, transaction, default, expected in cases:
+            with (
+                self.subTest(database=database, version=version, transaction=transaction, default=default),
+                patch.dict("os.environ", {}),
+                patch.object(check_neon_readonly, "get_engine") as get_engine,
+                patch.object(check_neon_readonly, "get_session_factory"),
+                patch.object(check_neon_readonly, "inspect") as inspect,
+            ):
+                connection = get_engine.return_value.connect.return_value.__enter__.return_value
+                connection.connection.driver_connection = self.driver()
+                connection.execute.return_value.one.return_value = (database, version, transaction, default)
+                connection.execute.return_value.scalar_one.return_value = check_neon_readonly.EXPECTED_REVISION
+                inspect.return_value.get_table_names.return_value = check_neon_readonly.EXPECTED_TABLES
+                result = check_neon_readonly.probe(HOST, require_empty=False, require_read_only_default=True)
+                self.assertEqual(result["status"], expected)
+                if expected == "PASS":
+                    self.assertEqual(result["server_version_num"], version)
+                    connection.rollback.assert_called_once()
+                else:
+                    inspect.assert_not_called()
+
     def config(self):
         directory = Path(__file__).resolve().parents[1]
         config = Config(str(directory / "alembic.ini"))

@@ -24,6 +24,8 @@ from app.models import (
 
 
 EXPECTED_REVISION = "3c3b_device_release"
+MIN_POSTGRES_VERSION = 180006
+NEXT_POSTGRES_MAJOR_VERSION = 190000
 EXPECTED_TABLES = {
     "orders", "entitlements", "email_claim_tokens", "email_claim_sessions",
     "email_claim_rate_limits", "authorized_devices", "alembic_version",
@@ -121,7 +123,9 @@ def probe(expected_host: str, expected_database: str = "neondb", *,
                 "current_setting('transaction_read_only'),"
                 "current_setting('default_transaction_read_only')"
             )).one()
-            if row[0] != expected_database or row[1] != "180006" or row[2] != "on":
+            if (row[0] != expected_database
+                    or not MIN_POSTGRES_VERSION <= int(row[1]) < NEXT_POSTGRES_MAJOR_VERSION
+                    or row[2] != "on"):
                 raise RuntimeError("Unexpected database/version/transaction mode")
             if require_read_only_default and row[3] != "on":
                 raise RuntimeError("Development connection acceptance requires read-only defaults")
