@@ -50,11 +50,32 @@ class GmailTransportTests(unittest.TestCase):
                 net.assert_not_called()
 
     def test_refresh_failure_stops_before_send_and_redacts(self):
-        err=HTTPError('https://oauth2.googleapis.com/token',400,'synthetic-secret',{},io.BytesIO(b'synthetic-refresh'))
+        err=HTTPError('https://oauth2.googleapis.com/token',400,'synthetic-secret',{},
+                      io.BytesIO(b'{"error":"invalid_grant","error_description":"synthetic-refresh"}'))
         with patch('app.services.email_delivery.urlopen',side_effect=err) as net:
-            with self.assertRaises(EmailDeliveryError) as caught: send_claim_email('buyer@example.com','proof',self.config)
+            with self.assertLogs('app.services.email_delivery', level='WARNING') as logs:
+                with self.assertRaises(EmailDeliveryError) as caught:
+                    send_claim_email('buyer@example.com','proof',self.config)
             self.assertEqual(str(caught.exception),'Email delivery unavailable')
+            self.assertEqual(logs.output, ['WARNING:app.services.email_delivery:Gmail API failure stage=refresh reason=invalid_grant http_status=400'])
             self.assertEqual(net.call_count,1)
+
+    def test_send_error_logs_only_allowlisted_diagnostics(self):
+        for field, provider_reason, logged_reason in [
+            ('errors', 'insufficientPermissions', 'insufficientPermissions'),
+            ('details', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT'),
+            ('errors', 'embedded-secret', 'http_error'),
+        ]:
+            body = {'error': {'message': 'embedded-secret', field: [{'reason': provider_reason}]}}
+            error = HTTPError('https://gmail.googleapis.com', 403, 'embedded-secret', {},
+                              io.BytesIO(json.dumps(body).encode()))
+            with self.subTest(reason=logged_reason), patch('app.services.email_delivery.urlopen',
+                    side_effect=[self.grant(), error]) as net:
+                with self.assertLogs('app.services.email_delivery', level='WARNING') as logs:
+                    with self.assertRaisesRegex(EmailDeliveryError, '^Email delivery unavailable$'):
+                        send_verification_email('buyer@example.com', 'proof', self.config)
+                self.assertEqual(logs.output, [f'WARNING:app.services.email_delivery:Gmail API failure stage=send reason={logged_reason} http_status=403'])
+                self.assertEqual(net.call_count, 2)
 
     def test_send_failures_are_not_retried_or_fallback(self):
         for error in (TimeoutError('proof'),HTTPError('https://gmail.googleapis.com',403,'secret',{},None),HTTPError('https://gmail.googleapis.com',429,'quota',{},None)):

@@ -7,7 +7,7 @@ export const messages: Record<string, [string, string]> = {
   ready_checkout: ['Email 已驗證，可前往綠界測試結帳。', 'Email verified. ECPay Stage checkout is available.'],
   pending: ['付款確認中，尚未開通完整版。', 'Payment pending. Full Access has not been activated.'],
   paid_claim: ['後端已確認付款。請要求啟用信以授權此裝置。', 'Payment confirmed by the backend. Request an access email for this device.'],
-  claim_sent: ['若符合資格，將寄送啟用信；重寄需間隔 10 分鐘。', 'If eligible, an access email will arrive. Allow 10 minutes before resending.'],
+  claim_sent: ['已收到啟用信申請。請查看信箱，重寄需間隔 10 分鐘。', 'Access email request received. Check your inbox and wait 10 minutes before requesting again.'],
   active: ['此裝置已由後端驗證，完整版已啟用。', 'This device is verified. Full Access is active.'],
   denied: ['使用權無效或已撤銷，已回到免費版。', 'Access is invalid or revoked. Free access restored.'],
   expired: ['裝置憑證已過期，請重新要求啟用信。', 'Device credential expired. Request a new access email.'],

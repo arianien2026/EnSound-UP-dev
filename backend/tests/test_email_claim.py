@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import tempfile
@@ -267,12 +268,26 @@ class EmailClaimTests(unittest.TestCase):
         with self.factory.begin() as session:
             session.get(Order, order_id).status = "refunded"
         response, tasks = self.request("buyer@example.com")
-        self.assertEqual(response, {"message": "If eligible, an access email will be sent."})
+        self.assertEqual(response, {"message": "Access email request received."})
         self.assertIsNone(tasks.tasks[0].args[1])
         with patch("app.api.access.get_email_config", side_effect=EmailDeliveryError):
             with self.assertRaises(HTTPException) as caught:
                 self.request("buyer@example.com")
         self.assertEqual(caught.exception.status_code, 503)
+
+    def test_failed_claim_delivery_does_not_imply_delivery_or_disclose_eligibility(self):
+        self.eligible()
+        unknown, unknown_tasks = self.request("absent@example.com")
+        known, known_tasks = self.request("buyer@example.com")
+        with patch("app.api.access.send_claim_email", side_effect=EmailDeliveryError("private detail")) as send:
+            asyncio.run(unknown_tasks())
+            send.assert_not_called()
+            with self.assertLogs(level="WARNING") as logs:
+                asyncio.run(known_tasks())
+            send.assert_called_once()
+        self.assertEqual(known, unknown)
+        self.assertEqual(known, {"message": "Access email request received."})
+        self.assertEqual(logs.output, ["WARNING:root:Email claim delivery unavailable"])
 
     def test_redeem_attempts_are_rate_limited_without_issuing_sessions(self):
         invalid = RedeemClaimRequest(token="A" * 43)

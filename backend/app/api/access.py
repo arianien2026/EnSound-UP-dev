@@ -170,7 +170,8 @@ def request_claim_link(body: ClaimLinkRequest, request: Request,
     except (SQLAlchemyError, RuntimeError, ValueError, EmailDeliveryError):
         raise HTTPException(status_code=503, detail="Email claim service unavailable") from None
     background_tasks.add_task(_deliver_claim, str(body.email), token, config)
-    return {"message": "If eligible, an access email will be sent."}
+    # Keep the same response for eligible and ineligible addresses.
+    return {"message": "Access email request received."}
 
 
 @router.post("/access/email-links/redeem")

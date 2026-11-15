@@ -103,7 +103,7 @@ class PaymentAccessChainTests(unittest.TestCase):
             tasks = BackgroundTasks()
             reply = request_claim_link(ClaimLinkRequest(email="buyer@example.com"),
                                        self.http_request(), tasks)
-            self.assertEqual(reply, {"message": "If eligible, an access email will be sent."})
+            self.assertEqual(reply, {"message": "Access email request received."})
             # Inspect the queued task; never execute it or contact Resend.
             token = tasks.tasks[0].args[1]
             self.assertIsNotNone(token)

@@ -2,6 +2,7 @@ import base64
 from email.message import EmailMessage
 from email.policy import SMTP
 import json
+import logging
 import os
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
@@ -146,24 +147,84 @@ def _deliver(payload: dict, config: EmailConfig) -> None:
         raise EmailDeliveryError("Email delivery unavailable") from None
 
 
-def _deliver_gmail(payload: dict, config: EmailConfig) -> None:
-    """Only HTTPS and send-only OAuth; never retry an ambiguous send.
+_GOOGLE_ERROR_CODES = {
+    "refresh": {"invalid_grant", "invalid_client", "unauthorized_client", "invalid_scope",
+                "temporarily_unavailable", "invalid_request"},
+    "send": {"authError", "insufficientPermissions", "forbidden", "failedPrecondition",
+             "rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "backendError", "badRequest",
+             "ACCESS_TOKEN_SCOPE_INSUFFICIENT", "SERVICE_DISABLED", "UNAUTHENTICATED",
+             "PERMISSION_DENIED", "FAILED_PRECONDITION", "RESOURCE_EXHAUSTED"},
+}
 
-    Access tokens live only for this invocation. Existing database-backed claim
-    cooldowns and one-use proofs remain authoritative, including across restarts.
-    """
+
+def _google_error_reason(error: HTTPError, stage: str) -> str:
     try:
-        refresh = Request("https://oauth2.googleapis.com/token", data=urlencode({
-            "client_id": config.client_id, "client_secret": config.client_secret,
-            "refresh_token": config.refresh_token, "grant_type": "refresh_token",
-        }).encode("ascii"), headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
-        with urlopen(refresh, timeout=10) as response:
-            grant = json.load(response)
-        access = grant.get("access_token") if isinstance(grant, dict) else None
-        if (not isinstance(access, str) or not access or any(c in access for c in "\r\n")
-                or grant.get("token_type", "").lower() != "bearer"
-                or ("scope" in grant and grant["scope"].split() != ["https://www.googleapis.com/auth/gmail.send"])):
-            raise ValueError()
+        with error:
+            response = json.loads(error.read(4096))
+        detail = response.get("error") if isinstance(response, dict) else None
+        if stage == "send" and isinstance(detail, dict):
+            for field in ("details", "errors"):
+                entries = detail.get(field)
+                if isinstance(entries, list):
+                    for entry in entries:
+                        reason = entry.get("reason") if isinstance(entry, dict) else None
+                        if isinstance(reason, str) and reason in _GOOGLE_ERROR_CODES[stage]:
+                            return reason
+            detail = detail.get("status")
+        if isinstance(detail, str) and detail in _GOOGLE_ERROR_CODES[stage]:
+            return detail
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return "http_error"
+
+
+def _log_gmail_failure(stage: str, reason: str, status: int | None = None) -> None:
+    logging.getLogger(__name__).warning("Gmail API failure stage=%s reason=%s http_status=%s",
+                                       stage, reason, status if status is not None else "none")
+
+
+def _google_json(request: Request, stage: str):
+    try:
+        with urlopen(request, timeout=10) as response:
+            return json.load(response)
+    except HTTPError as error:
+        _log_gmail_failure(stage, _google_error_reason(error, stage), error.code)
+    except TimeoutError:
+        _log_gmail_failure(stage, "timeout")
+    except OSError:
+        _log_gmail_failure(stage, "network_error")
+    except (ValueError, TypeError):
+        _log_gmail_failure(stage, "invalid_response")
+    raise EmailDeliveryError("Email delivery unavailable") from None
+
+
+def refresh_gmail_access_token(config: EmailConfig) -> str:
+    """Request a send-only grant without calling Gmail or logging credentials."""
+    if config.transport != "gmail_api":
+        raise EmailDeliveryError("Email delivery unavailable")
+    refresh = Request("https://oauth2.googleapis.com/token", data=urlencode({
+        "client_id": config.client_id, "client_secret": config.client_secret,
+        "refresh_token": config.refresh_token, "grant_type": "refresh_token",
+    }).encode("ascii"), headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
+    grant = _google_json(refresh, "refresh")
+    access = grant.get("access_token") if isinstance(grant, dict) else None
+    token_type = grant.get("token_type") if isinstance(grant, dict) else None
+    if (not isinstance(access, str) or not access or any(c in access for c in "\r\n")
+            or not isinstance(token_type, str) or token_type.lower() != "bearer"):
+        _log_gmail_failure("refresh", "invalid_grant_response")
+        raise EmailDeliveryError("Email delivery unavailable")
+    if "scope" in grant:
+        scope = grant["scope"]
+        if not isinstance(scope, str) or scope.split() != ["https://www.googleapis.com/auth/gmail.send"]:
+            _log_gmail_failure("refresh", "unexpected_scope")
+            raise EmailDeliveryError("Email delivery unavailable")
+    return access
+
+
+def _deliver_gmail(payload: dict, config: EmailConfig) -> None:
+    # Do not retry an ambiguous send or fall back to another provider.
+    access = refresh_gmail_access_token(config)
+    try:
         message = EmailMessage(policy=SMTP)
         message["From"] = config.sender
         message["To"] = payload["to"][0]
@@ -174,11 +235,10 @@ def _deliver_gmail(payload: dict, config: EmailConfig) -> None:
                           data=json.dumps({"raw": raw}).encode("utf-8"),
                           headers={"Authorization": "Bearer " + access,
                                    "Content-Type": "application/json"}, method="POST")
-        with urlopen(request, timeout=10) as response:
-            result = json.load(response)
-        if not isinstance(result, dict) or not isinstance(result.get("id"), str) or not result["id"]:
-            raise ValueError()
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, TypeError, AttributeError):
-        # Do not include provider bodies, OAuth secrets or message proofs.
-        # No fallback to another provider: delivery may already have occurred.
+    except (ValueError, TypeError, AttributeError):
+        _log_gmail_failure("send", "invalid_message")
         raise EmailDeliveryError("Email delivery unavailable") from None
+    result = _google_json(request, "send")
+    if not isinstance(result, dict) or not isinstance(result.get("id"), str) or not result["id"]:
+        _log_gmail_failure("send", "invalid_response")
+        raise EmailDeliveryError("Email delivery unavailable")
