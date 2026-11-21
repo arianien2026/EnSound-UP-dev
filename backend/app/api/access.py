@@ -13,6 +13,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.orders import _PAGE_HEADERS
 from app.database import get_session_factory
 from app.dev_frontend import dev_frontend_url
+from app.dev_claim_e2e import (
+    PAID_TRADE, ClaimRun, active_claim_run, claim_transaction, require_claim_operator,
+    require_run_proof, reserve_claim_email, verify_claim_runtime,
+)
 from app.services.email_claim import (
     allow_redemption_attempt, get_rate_limit_key, issue_claim_if_eligible,
     issue_release_if_eligible, redeem_claim, redeem_release_claim,
@@ -155,30 +159,64 @@ def release_claimed_device(device_id: UUID4,
                         headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
+@router.get("/access/claim-runtime-proof", include_in_schema=False)
+def claim_runtime_proof(request: Request) -> Response:
+    headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+    try:
+        run = active_claim_run(datetime.now(timezone.utc))
+        if run is not None:
+            require_claim_operator(run, request.headers.get("X-EnSound-E2E-Key", ""),
+                                   request.headers.get("X-EnSound-E2E-Recipient", ""))
+            if (request.headers.get("X-EnSound-E2E-Order") == PAID_TRADE
+                    and verify_claim_runtime(get_session_factory(), run, get_rate_limit_key())
+                    and active_claim_run(datetime.now(timezone.utc)) == run):
+                return Response(status_code=204, headers=headers)
+    except (HTTPException, SQLAlchemyError, RuntimeError, ValueError):
+        pass
+    return Response(status_code=404, headers=headers)
+
+
 @router.post("/access/email-links", status_code=202)
 def request_claim_link(body: ClaimLinkRequest, request: Request,
                        background_tasks: BackgroundTasks) -> dict[str, str]:
     now = datetime.now(timezone.utc)
+    run = active_claim_run(now)
+    if run is not None:
+        require_claim_operator(run, request.headers.get("X-EnSound-E2E-Key", ""), str(body.email))
     try:
         config = get_email_config()
         secret = get_rate_limit_key()
-        with get_session_factory().begin() as session:
+        with claim_transaction(get_session_factory(), run) as session:
+            if run is not None and not reserve_claim_email(session, run, now, secret):
+                raise HTTPException(status_code=429, detail="Development Claim attempt already used")
             token = issue_claim_if_eligible(
                 session, str(body.email), request.client.host if request.client else "unknown",
-                now, secret,
+                now, secret, paid_stage_trade=PAID_TRADE if run is not None else None,
             )
     except (SQLAlchemyError, RuntimeError, ValueError, EmailDeliveryError):
         raise HTTPException(status_code=503, detail="Email claim service unavailable") from None
-    background_tasks.add_task(_deliver_claim, str(body.email), token, config)
+    background_tasks.add_task(_deliver_claim_in_window, str(body.email), token, config, run)
     # Keep the same response for eligible and ineligible addresses.
     return {"message": "Access email request received."}
 
 
+def _deliver_claim_in_window(email: str, token: str | None, config, run: ClaimRun | None) -> None:
+    if run is not None:
+        current = active_claim_run(datetime.now(timezone.utc))
+        if current != run:
+            return
+    _deliver_claim(email, token, config)
+
+
 @router.post("/access/email-links/redeem")
 def redeem_email_link(body: RedeemClaimRequest, request: Request) -> JSONResponse:
+    now = datetime.now(timezone.utc)
+    run = active_claim_run(now)
     try:
-        with get_session_factory().begin() as session:
-            now = datetime.now(timezone.utc)
+        factory = get_session_factory()
+        if run is not None:
+            require_run_proof(factory, run, body.token, now)
+        with claim_transaction(factory, run) as session:
             allowed = allow_redemption_attempt(
                 session, request.client.host if request.client else "unknown", now,
                 get_rate_limit_key(),
@@ -199,10 +237,14 @@ def redeem_email_link(body: RedeemClaimRequest, request: Request) -> JSONRespons
 
 @router.post("/access/devices", status_code=201)
 def register_claimed_device(body: RegisterDeviceRequest) -> JSONResponse:
+    now = datetime.now(timezone.utc)
+    run = active_claim_run(now)
     try:
-        with get_session_factory().begin() as session:
-            device = register_device(session, body.claim_session, body.device_id,
-                                     datetime.now(timezone.utc))
+        factory = get_session_factory()
+        if run is not None:
+            require_run_proof(factory, run, body.claim_session, now, registration=True)
+        with claim_transaction(factory, run) as session:
+            device = register_device(session, body.claim_session, body.device_id, now)
     except InvalidClaimSession:
         raise HTTPException(status_code=401, detail="Invalid or expired claim session") from None
     except IneligibleAccess:
