@@ -1,6 +1,6 @@
-"""Idempotent entitlement grant after a verified ECPay Stage paid order.
+"""Idempotent entitlement grant after a verified ECPay paid order.
 
-The recovered callback invokes this after the payment transaction commits.
+The payment callback invokes this after the payment transaction commits.
 No public endpoint grants access directly; internal recovery requires a permit.
 """
 
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import get_session_factory
 from app.dev_e2e import require_scoped_email
+from app.services.ecpay_stage import payment_environment
 from app.models import Entitlement, Order
 from app.services.pricing import PRODUCT_CODE
 
@@ -35,7 +36,7 @@ class GrantedEntitlement:
 
 
 def _eligible_order(session: Session, order_id: UUID) -> Order:
-    # Only the trusted, authenticated Stage callback currently writes this
+    # Only the trusted, authenticated callback for the selected environment writes this
     # combination of paid status and provider payment identity. DB writers are
     # inside the trust boundary; an email or browser claim is never proof.
     order = session.execute(
@@ -53,10 +54,10 @@ def _eligible_order(session: Session, order_id: UUID) -> Order:
         or order.amount <= 0
         or not order.provider_order_id
         or not order.provider_trade_no
-        or order.payment_environment != "ecpay_stage"
+        or order.payment_environment != payment_environment()
         or order.provider_paid_at is None
     ):
-        raise IneligibleEntitlementOrder("Order is not a verified paid Stage order")
+        raise IneligibleEntitlementOrder("Order is not a verified paid order")
     require_scoped_email(order.entitlement_email)
     return order
 
@@ -96,7 +97,7 @@ def _record_failure(factory: sessionmaker, order_id: UUID) -> None:
 
 
 def grant_paid_order(order_id: UUID, factory: sessionmaker | None = None) -> GrantedEntitlement:
-    """Idempotently grant a verified paid Stage order, with no access credential.
+    """Idempotently grant a verified paid order, with no access credential.
 
     The unique source-order constraint and order row lock serialize concurrent
     attempts on PostgreSQL. A committed pending/failed record identifies an

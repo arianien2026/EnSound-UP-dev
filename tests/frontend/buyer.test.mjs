@@ -62,6 +62,32 @@ test('buyer order → verify email → Stage fields → paid → email claim →
  assert.equal(c.state.orderStatus,'paid');assert.equal(c.state.full,false)
  await claim(c);assert.equal(c.state.full,true);assert.equal((await fixture('counts')).entitlements,1)
 })
+test('overlapping buyer clicks submit one order', async () => {
+  const requests = [];
+  const c = client(storage(), (url, init) => {
+    requests.push(new URL(url).pathname);
+    return localFetch(url, init);
+  });
+  await Promise.all([c.createOrder(email, email), c.createOrder(email, email)]);
+  assert.equal(requests.filter(path => path === '/orders').length, 1);
+  assert.equal((await fixture('counts')).orders, 1);
+})
+
+test('overlapping checkout clicks return only one Stage form', async () => {
+  const requests = [];
+  const c = client(storage(), (url, init) => {
+    requests.push(new URL(url).pathname);
+    return localFetch(url, init);
+  });
+  await c.createOrder(email, email);
+  const {token} = await fixture('email');
+  assert.equal((await api('/orders/verify-email', {token})).status, 200);
+  await c.refreshOrder();
+  const results = await Promise.all([c.checkout(), c.checkout()]);
+  assert.equal(requests.filter(path => path.endsWith('/checkout')).length, 1);
+  assert.equal(results.filter(Boolean).length, 1);
+})
+
 test('payment pending, failed result, and SimulatePaid notifications keep FREE',async()=>{
  const c=client();const data=await checkout(c);assert.equal(c.state.full,false)
  await fixture('pay',{fields:data.fields,changes:{RtnCode:'10300066'}})
@@ -154,4 +180,43 @@ test('returning from checkout restores the pending order but never restores FULL
  await returned.start();assert.equal(returned.state.orderStatus,'paid');assert.equal(returned.state.full,false)
  await claim(returned);assert.equal(returned.state.full,true);assert.equal(returned.state.orderId,null)
  const later=client(store);assert.equal(later.state.orderId,null);await later.start();assert.equal(later.state.full,true)
+})
+
+test('separate tabs and a lost order response reuse one server purchase key', async () => {
+  const shared = storage();
+  const calls = [];
+  const dropResponse = async (url, init) => {
+    const response = await localFetch(url, init);
+    calls.push(JSON.parse(init.body).idempotency_key);
+    assert.equal(response.status, 201);
+    throw new Error('Synthetic response timeout after commit');
+  };
+  const first = client(shared, dropResponse);
+  await first.createOrder(email, email);
+  assert.equal(first.state.message, 'unavailable');
+  const fetchRetry = (url, init) => {
+    calls.push(JSON.parse(init.body).idempotency_key);
+    return localFetch(url, init);
+  };
+  const tabA = client(shared, fetchRetry);
+  const tabB = client(shared, fetchRetry);
+  await Promise.all([tabA.createOrder(email, email), tabB.createOrder(email, email)]);
+  assert.equal(new Set(calls).size, 1);
+  assert.equal((await fixture('counts')).orders, 1);
+  assert.ok(tabA.state.orderId);
+  assert.equal(tabA.state.orderId, tabB.state.orderId);
+})
+
+test('production buyer permits only the explicitly selected provider endpoint', async () => {
+  const { PRODUCTION } = await import('../../.buyer-test/BuyerClient.js');
+  const f = () => Promise.resolve(new Response(JSON.stringify({
+    checkout_url: STAGE, fields: {MerchantTradeNo:'synthetic',CheckMacValue:'synthetic'},
+  }), {status:200}));
+  assert.throws(() => new BuyerClient('https://ensound-up-dev.onrender.com',storage(),f,undefined,undefined,'production'));
+  const c = new BuyerClient('https://synthetic-api.example.test',storage(),f,undefined,undefined,'production');
+  clients.push(c);
+  c.state.orderId = 'a1b2c3d4-e5f6-4789-8234-567890abcdef';
+  assert.equal(await c.checkout(),null);
+  assert.throws(() => submitCheckout({checkout_url:STAGE,fields:{}}, {}, 'production'));
+  assert.throws(() => submitCheckout({checkout_url:PRODUCTION,fields:{}}, {}, 'stage'));
 })

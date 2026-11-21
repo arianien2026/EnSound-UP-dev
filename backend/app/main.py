@@ -9,13 +9,13 @@ from app.api.checkout import router as checkout_router
 from app.api.ecpay_return import router as ecpay_return_router
 from app.api.access import router as access_router
 from app.database import get_engine
-from app.dev_frontend import dev_frontend_url
+from app.dev_frontend import payment_frontend_url
 from app.dev_e2e import development_e2e_gate
 
 
 app = FastAPI()
 app.middleware("http")(development_e2e_gate)
-frontend_url = dev_frontend_url()
+frontend_url = payment_frontend_url()
 if frontend_url:
     app.add_middleware(CORSMiddleware, allow_origins=[
         f"{urlsplit(frontend_url).scheme}://{urlsplit(frontend_url).netloc}"

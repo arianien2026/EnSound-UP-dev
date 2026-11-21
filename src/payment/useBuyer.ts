@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
-import { BuyerClient } from './BuyerClient.js'
+import { BuyerClient, type PaymentMode } from './BuyerClient.js'
 import { initialClaim } from './bootstrap.js'
 export function useBuyer(enabled = true) {
-  const [client] = useState(() => new BuyerClient(import.meta.env.VITE_ENSOUND_API_BASE_URL || 'https://ensound-up-dev.onrender.com', window.localStorage))
+  const [client] = useState(() => {
+    const mode = (import.meta.env.VITE_ENSOUND_PAYMENT_ENV ?? 'stage') as PaymentMode
+    const api = import.meta.env.VITE_ENSOUND_API_BASE_URL || 'https://ensound-up-dev.onrender.com'
+    return new BuyerClient(api, window.localStorage, undefined, undefined, undefined, mode)
+  })
   const [full, setFull] = useState(false)
   useEffect(() => {
     if (!enabled) return

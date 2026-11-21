@@ -3,14 +3,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
-from sqlalchemy.exc import SQLAlchemyError
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, UUID4, field_validator
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.database import get_session_factory
 from app.dev_e2e import require_scoped_email
 from app.dev_e2e import configured_scope
 from app.services.email_claim import _count_request, _rate_key, get_rate_limit_key
-from app.dev_frontend import dev_frontend_url
+from app.dev_frontend import payment_frontend_url
 from html import escape
 from app.models import Order
 from app.services.email_delivery import (
@@ -19,6 +20,9 @@ from app.services.email_delivery import (
     send_verification_email,
 )
 from app.services.email_verification import consume_verification_token, issue_verification_token
+from app.services.ecpay_stage import (
+    PRODUCTION_ENVIRONMENT, STAGE_ENVIRONMENT, checkout_enabled, get_payment_config, payment_environment,
+)
 from app.services.pricing import PRODUCT_CODE, get_price
 
 
@@ -29,6 +33,7 @@ class CreateOrderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
+    idempotency_key: UUID4 | None = None
 
     @field_validator("email", mode="before")
     @classmethod
@@ -37,7 +42,9 @@ class CreateOrderRequest(BaseModel):
 
 
 class CreateOrderResponse(BaseModel):
-    order_id: UUID
+    model_config = ConfigDict(from_attributes=True)
+
+    order_id: UUID = Field(validation_alias=AliasChoices("order_id", "id"))
     entitlement_email: str
     product_code: str
     amount: int
@@ -54,58 +61,71 @@ class VerifyEmailRequest(BaseModel):
     token: str = Field(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]+$")
 
 
+def _order_replay(session, request: CreateOrderRequest, environment: str) -> CreateOrderResponse | None:
+    if request.idempotency_key is None:
+        return None
+    existing = session.scalar(select(Order).where(Order.purchase_key == request.idempotency_key))
+    if existing is None:
+        return None
+    if (existing.entitlement_email != str(request.email)
+            or (existing.payment_environment or STAGE_ENVIRONMENT) != environment):
+        raise HTTPException(status_code=409, detail="Purchase attempt conflicts with existing order")
+    return CreateOrderResponse.model_validate(existing)
+
+
 @router.post("/orders", response_model=CreateOrderResponse, status_code=201)
 def create_order(request: CreateOrderRequest) -> CreateOrderResponse:
     require_scoped_email(str(request.email))
     try:
+        environment = payment_environment()
+        if not checkout_enabled(environment):
+            raise HTTPException(status_code=503, detail="Checkout unavailable")
+        if environment == PRODUCTION_ENVIRONMENT:
+            if request.idempotency_key is None:
+                raise HTTPException(status_code=422, detail="Purchase attempt key required")
+            get_payment_config()
         email_config = get_email_config()
-    except EmailDeliveryError:
-        raise HTTPException(status_code=503, detail="Verification email unavailable") from None
-    created_at = datetime.now(timezone.utc)
-    price = get_price(now=created_at)
-    order = Order(
-        entitlement_email=str(request.email),
-        product_code=PRODUCT_CODE,
-        amount=price.amount,
-        currency=price.currency,
-        pricing_code=price.pricing_code,
-        status="pending",
-        created_at=created_at,
-        expires_at=created_at + timedelta(hours=2),
-        paid_at=None,
-        provider_order_id=None,
-    )
-    token = issue_verification_token(order, created_at)
-    try:
         with get_session_factory()() as session:
+            replay = _order_replay(session, request, environment)
+            if replay is not None:
+                return replay
+            created_at = datetime.now(timezone.utc)
+            price = get_price(now=created_at)
+            order = Order(
+                entitlement_email=str(request.email), product_code=PRODUCT_CODE,
+                amount=price.amount, currency=price.currency, pricing_code=price.pricing_code,
+                status="pending", created_at=created_at, expires_at=created_at + timedelta(hours=2),
+                purchase_key=request.idempotency_key, payment_environment=environment,
+            )
+            token = issue_verification_token(order, created_at)
+            session.add(order)
             try:
-                session.add(order)
-                scope = configured_scope()
-                if scope and scope.buyer and not _count_request(session,
-                    _rate_key(get_rate_limit_key(), "buyer_order", scope.email), created_at, 3):
-                    raise HTTPException(status_code=429, detail="Try again later")
+                # Acquire the unique key before spending the email allowance.
                 session.flush()
-                response = CreateOrderResponse(
-                    order_id=order.id,
-                    entitlement_email=order.entitlement_email,
-                    product_code=order.product_code,
-                    amount=order.amount,
-                    currency=order.currency,
-                    pricing_code=order.pricing_code,
-                    status=order.status,
-                    created_at=order.created_at,
-                    expires_at=order.expires_at,
-                )
+            except IntegrityError:
+                session.rollback()
+                replay = _order_replay(session, request, environment)
+                if replay is not None:
+                    return replay
+                raise
+            scope = configured_scope()
+            if scope and scope.buyer and not _count_request(session,
+                _rate_key(get_rate_limit_key(), "buyer_order", scope.email), created_at, 3):
+                raise HTTPException(status_code=429, detail="Try again later")
+            response = CreateOrderResponse.model_validate(order)
+            try:
                 session.commit()
             except SQLAlchemyError:
                 session.rollback()
                 raise
+    except EmailDeliveryError:
+        raise HTTPException(status_code=503, detail="Verification email unavailable") from None
     except (SQLAlchemyError, RuntimeError, ValueError):
         raise HTTPException(status_code=503, detail="Order service unavailable") from None
     try:
         send_verification_email(response.entitlement_email, token, email_config)
     except EmailDeliveryError:
-        # The pending order remains unverified and expires normally; a new POST can retry.
+        # The outcome may be uncertain. Replay the same order without another send.
         raise HTTPException(status_code=503, detail="Verification email unavailable") from None
     return response
 
@@ -175,7 +195,7 @@ _PAGE_HEADERS = {
 @router.get("/orders/verify-email", response_class=HTMLResponse)
 def verification_page() -> HTMLResponse:
     try:
-        destination = dev_frontend_url()
+        destination = payment_frontend_url()
     except ValueError:
         destination = None
     link = (f'<p><a href="{escape(destination, quote=True)}">返回 EnSound UP / Return to EnSound UP</a></p>'

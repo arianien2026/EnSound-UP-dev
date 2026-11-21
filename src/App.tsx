@@ -3,7 +3,7 @@ import posthog from 'posthog-js'
 import { BuyerPanel } from './payment/BuyerPanel'
 import { useBuyer } from './payment/useBuyer'
 import { initialClaim } from './payment/bootstrap'
-const UI_PREVIEW = import.meta.env.DEV && import.meta.env.VITE_ENSOUND_UI_PREVIEW === '1' && ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).get('uiPreview') === '1' && !initialClaim
+const UI_PREVIEW = import.meta.env.DEV && import.meta.env.VITE_ENSOUND_PAYMENT_ENV !== 'production' && import.meta.env.VITE_ENSOUND_UI_PREVIEW === '1' && ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).get('uiPreview') === '1' && !initialClaim
 import { lookupCmudictWord } from './pronunciation/cmudictLookup'
 import type { WordPronunciation } from './pronunciation/pronunciationTypes'
 
@@ -1334,10 +1334,9 @@ function nextChallengeQuestion() {
               {t('付款方式', 'Payment')}
             </p>
             <p style={{ margin: '0 0 14px', fontSize: '0.92rem', lineHeight: 1.6 }}>
-              {t(
-                '線上付款（正式開放後由綠界科技提供付款服務）',
-                'Online payment (payment service will be provided by ECPay after launch).',
-              )}
+              {buyer.client.paymentMode === 'production'
+                ? t('線上付款由綠界科技提供。', 'Online payment is provided by ECPay.')
+                : t('綠界測試付款。', 'ECPay test checkout.')}
             </p>
 
             <p style={{ margin: '0 0 5px', fontWeight: 700 }}>

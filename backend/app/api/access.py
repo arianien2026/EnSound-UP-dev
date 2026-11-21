@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.orders import _PAGE_HEADERS
 from app.database import get_session_factory
-from app.dev_frontend import dev_frontend_url
+from app.dev_frontend import payment_frontend_url
 from app.services.email_claim import (
     allow_redemption_attempt, get_rate_limit_key, issue_claim_if_eligible,
     issue_release_if_eligible, redeem_claim, redeem_release_claim,
@@ -297,7 +297,7 @@ def claim_page() -> HTMLResponse:
 @router.get("/access/claim.js")
 def claim_script() -> Response:
     try:
-        destination = dev_frontend_url()
+        destination = payment_frontend_url()
     except ValueError:
         destination = None
     return Response(_CLAIM_SCRIPT.replace("__FRONTEND_URL__", json.dumps(destination)),

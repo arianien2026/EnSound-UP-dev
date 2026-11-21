@@ -24,8 +24,16 @@ def get_database_url() -> str:
     host = (parsed.host or "").lower()
     expected_host = os.environ.get("ENSOUND_DEV_DATABASE_HOST", "").strip().lower()
     expected_database = os.environ.get("ENSOUND_DEV_DATABASE_NAME", "neondb").strip()
+    if os.environ.get("ECPAY_PAYMENT_ENV", "stage") == "production":
+        expected_host = os.environ.get("ENSOUND_PRODUCTION_DATABASE_HOST", "").strip().lower()
+        expected_database = os.environ.get("ENSOUND_PRODUCTION_DATABASE_NAME", "").strip()
+        if (not expected_host or not expected_database
+                or expected_host in {"localhost", "127.0.0.1", "::1"}
+                or expected_host.startswith("ep-sparkling-smoke-b80uupgp.")
+                or expected_host.startswith("ep-sparkling-smoke-b80uupgp-pooler.")):
+            raise ValueError("Production database target is not configured")
     if expected_host and (host != expected_host or parsed.database != expected_database):
-        raise ValueError("Database does not match the configured Development target")
+        raise ValueError("Database does not match the configured target")
     if host.endswith(".neon.tech") or expected_host:
         # Prevent libpq query parameters from overriding the verified URL target.
         if any(key in parsed.query for key in ("host", "hostaddr", "port", "dbname", "service", "servicefile")):

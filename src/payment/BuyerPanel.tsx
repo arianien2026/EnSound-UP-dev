@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BuyerClient, STAGE } from './BuyerClient.js'
+import { BuyerClient, STAGE, PRODUCTION, type PaymentMode } from './BuyerClient.js'
 export const messages: Record<string, [string, string]> = {
   free: ['目前使用免費版。已購買者可要求啟用信。', 'Free access. Already purchased? Request an access email.'],
   checking: ['正在驗證使用權，暫以免費版使用。', 'Checking access; Free remains available.'],
@@ -17,9 +17,10 @@ export const messages: Record<string, [string, string]> = {
   email_mismatch: ['兩次輸入的 Email 必須相同。', 'Both email entries must match.'],
   order_closed: ['此訂單目前無法結帳，請確認訂單或聯絡客服。', 'This order cannot be checked out. Review it or contact support.'],
 }
-export function submitCheckout(data: { checkout_url: string; fields: Record<string, string> }, doc: Document = document) {
-  if (data.checkout_url !== STAGE) throw new Error('Invalid checkout target')
-  const form = doc.createElement('form'); form.method = 'POST'; form.action = STAGE
+export function submitCheckout(data: { checkout_url: string; fields: Record<string, string> }, doc: Document = document, mode: PaymentMode = 'stage') {
+  const destination = mode === 'production' ? PRODUCTION : STAGE
+  if (data.checkout_url !== destination) throw new Error('Invalid checkout target')
+  const form = doc.createElement('form'); form.method = 'POST'; form.action = destination
   form.target = '_self'; form.rel = 'noopener noreferrer'; form.hidden = true
   for (const [name, value] of Object.entries(data.fields)) {
     const input = doc.createElement('input'); input.type = 'hidden'; input.name = name; input.value = value; form.appendChild(input)
@@ -31,10 +32,13 @@ export function BuyerPanel({ client }: { client: BuyerClient }) {
   const [state, setState] = useState(client.state)
   const [email, setEmail] = useState(''); const [confirmation, setConfirmation] = useState('')
   useEffect(() => { setState(client.state); return client.subscribe(() => setState(client.state)) }, [client])
-  const msg = messages[state.message] || messages.unavailable
+  const msg = client.paymentMode === 'production' && state.message === 'ready_checkout'
+    ? ['Email 已驗證，可前往綠界結帳。', 'Email verified. ECPay checkout is available.']
+    : messages[state.message] || messages.unavailable
   return <section className="buyer-panel" aria-label="購買與啟用 / Purchase and access">
     <h3>購買與啟用 / Purchase and access</h3>
-    <p>Development · ECPay Stage（測試付款）</p>
+    {client.paymentMode === 'stage' && <p>Development · ECPay Stage（測試付款）</p>}
+    <p>完整版需連線驗證及使用。<br />Full Access requires an internet connection.</p>
     <p role="status" aria-live="polite">{msg[0]}<br />{msg[1]}</p>
     <label>Email<input type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
     <label>再次確認 Email / Confirm email<input type="email" autoComplete="off" value={confirmation} onChange={e => setConfirmation(e.target.value)} /></label>
@@ -42,8 +46,8 @@ export function BuyerPanel({ client }: { client: BuyerClient }) {
     {state.amount !== null && <p>後端訂單金額 / Order total: NT${state.amount}</p>}
     {state.orderId && <><button type="button" disabled={state.busy} onClick={() => void client.refreshOrder()}>確認 Email／付款狀態 / Check status</button>
       <button type="button" disabled={state.busy || !state.emailVerified || state.orderStatus !== 'pending'} onClick={async () => {
-        const data = await client.checkout(); if (data) submitCheckout(data)
-      }}>綠界測試結帳 / ECPay Stage checkout</button></>}
+        const data = await client.checkout(); if (data) submitCheckout(data, document, client.paymentMode)
+      }}>{client.paymentMode === 'production' ? '綠界結帳 / ECPay checkout' : '綠界測試結帳 / ECPay Stage checkout'}</button></>}
     <button type="button" disabled={state.busy || !email} onClick={() => void client.claimEmail(email)}>要求啟用信 / Request access email</button>
     <button type="button" disabled={state.busy} onClick={() => void client.revalidate()}>重新驗證此裝置 / Recheck this device</button>
     <p>付款返回頁面不會自動授權；啟用信需在 15 分鐘內使用。<br />Returning from checkout does not grant access. Use access email within 15 minutes.</p>

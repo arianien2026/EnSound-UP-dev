@@ -21,6 +21,7 @@ class Order(Base):
             name="ck_orders_status",
         ),
         CheckConstraint("expires_at > created_at", name="ck_orders_expiry_after_creation"),
+        UniqueConstraint("purchase_key", name="uq_orders_purchase_key"),
         UniqueConstraint("provider_order_id", name="uq_orders_provider_order_id"),
         UniqueConstraint("provider_trade_no", name="uq_orders_provider_trade_no"),
         UniqueConstraint(
@@ -42,6 +43,9 @@ class Order(Base):
         DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    purchase_key: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    checkout_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checkout_merchant_id: Mapped[str | None] = mapped_column(String(10))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     provider_order_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     provider_trade_no: Mapped[str | None] = mapped_column(String(20), nullable=True)

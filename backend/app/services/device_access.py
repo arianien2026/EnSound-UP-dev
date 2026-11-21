@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.services.ecpay_stage import payment_environment
 from app.models import AuthorizedDevice, EmailClaimSession, Entitlement, Order
 from app.services.entitlement_grant import IneligibleEntitlementOrder, _eligible_order
 from app.services.pricing import PRODUCT_CODE
@@ -132,7 +133,7 @@ def verify_online_access(session: Session, device_id: UUID, credential: str,
             order.product_code != PRODUCT_CODE or order.currency != "TWD" or
             type(order.amount) is not int or order.amount <= 0 or
             not order.provider_order_id or not order.provider_trade_no or
-            order.payment_environment != "ecpay_stage" or order.provider_paid_at is None or
+            order.payment_environment != payment_environment() or order.provider_paid_at is None or
             entitlement.entitlement_email != order.entitlement_email):
         return None
     return OnlineAccess(entitlement.product_code, _utc(device.credential_expires_at))

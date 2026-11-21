@@ -113,7 +113,7 @@ class EmailClaimTests(unittest.TestCase):
             self.assertIsNone(record.consumed_at)
         self.assertEqual(set(Base.metadata.tables), {
             "orders", "entitlements", "email_claim_tokens", "email_claim_sessions",
-            "email_claim_rate_limits", "authorized_devices",
+            "email_claim_rate_limits", "authorized_devices", "refund_events",
         })
 
     def test_invalid_expired_replayed_and_refunded_claims(self):

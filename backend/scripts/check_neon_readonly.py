@@ -19,19 +19,19 @@ from sqlalchemy.engine import make_url
 import psycopg
 from app.models import (
     AuthorizedDevice, EmailClaimRateLimit, EmailClaimSession, EmailClaimToken,
-    Entitlement, Order,
+    Entitlement, Order, RefundEvent,
 )
 
 
-EXPECTED_REVISION = "3c3b_device_release"
+EXPECTED_REVISION = "4a_payment_release"
 MIN_POSTGRES_VERSION = 180006
 NEXT_POSTGRES_MAJOR_VERSION = 190000
 EXPECTED_TABLES = {
     "orders", "entitlements", "email_claim_tokens", "email_claim_sessions",
-    "email_claim_rate_limits", "authorized_devices", "alembic_version",
+    "email_claim_rate_limits", "authorized_devices", "refund_events", "alembic_version",
 }
 ORM_MODELS = (Order, Entitlement, AuthorizedDevice, EmailClaimToken,
-              EmailClaimSession, EmailClaimRateLimit)
+              EmailClaimSession, EmailClaimRateLimit, RefundEvent)
 
 
 def tls_failure_diagnostics(error: Exception) -> dict:

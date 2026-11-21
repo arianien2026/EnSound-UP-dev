@@ -67,6 +67,14 @@ def get_email_config() -> EmailConfig:
         )
     ):
         raise EmailDeliveryError("Email delivery unavailable")
+    if os.environ.get("ECPAY_PAYMENT_ENV", "stage") == "production":
+        from app.services.ecpay_stage import get_payment_config
+        try:
+            callback = urlsplit(get_payment_config().return_url)
+        except ValueError:
+            raise EmailDeliveryError("Email delivery unavailable") from None
+        if (parsed.scheme, parsed.netloc, parsed.path) != (callback.scheme, callback.netloc, ""):
+            raise EmailDeliveryError("Email delivery unavailable")
     return EmailConfig(api_key, sender, base_url, transport, client_id, client_secret, refresh_token)
 
 

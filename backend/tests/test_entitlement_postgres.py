@@ -566,6 +566,153 @@ class IsolatedPostgresGrantTests(unittest.TestCase):
                 AuthorizedDevice.revoked_at.is_(None))), 3)
 
 
+    def test_production_concurrent_retry_and_operator_refund_rehearsal(self):
+        import contextlib
+        import io
+        import json
+        import tempfile
+        from threading import Barrier
+        from zoneinfo import ZoneInfo
+
+        from app.api.checkout import create_stage_checkout
+        from app.api.ecpay_return import receive_ecpay_production_result
+        from app.api.orders import CreateOrderRequest, VerifyEmailRequest, create_order, verify_email
+        from app.models import RefundEvent
+        from app.services.ecpay_stage import get_payment_config
+        from app.services.refund_reconcile import RefundEvidence
+        from scripts import reconcile_refund
+        from test_production_payment_candidate import PROD_ENV
+
+        def concurrent(action, n=8):
+            start = Barrier(n)
+            def run():
+                start.wait(timeout=15)
+                return action()
+            with ThreadPoolExecutor(max_workers=n) as pool:
+                futures = [pool.submit(run) for _ in range(n)]
+                return [f.result(timeout=25) for f in futures]
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.dict(os.environ, PROD_ENV, clear=True))
+            for module in ("app.api.orders", "app.api.checkout", "app.api.ecpay_return",
+                           "app.services.entitlement_grant", "scripts.reconcile_refund"):
+                stack.enter_context(patch(module + ".get_session_factory", return_value=self.factory))
+            stack.enter_context(patch("app.api.orders.get_email_config"))
+            delivery = stack.enter_context(patch("app.api.orders.send_verification_email"))
+            stack.enter_context(patch("scripts.reconcile_refund.get_database_url",
+                                      return_value=self.engine.url.render_as_string(hide_password=False)))
+
+            request = CreateOrderRequest(email="launch-pg@example.com", idempotency_key=uuid4())
+            attempts = concurrent(lambda: create_order(request))
+            order_id = attempts[0].order_id
+            self.assertEqual({item.order_id for item in attempts}, {order_id})
+            self.assertEqual(create_order(request).order_id, order_id)
+            delivery.assert_called_once()
+            with self.assertRaises(HTTPException) as conflict:
+                create_order(request.model_copy(update={"email": "other@example.com"}))
+            self.assertEqual(conflict.exception.status_code, 409)
+            with self.factory() as session:
+                self.assertEqual(session.scalar(select(func.count()).select_from(Order).where(
+                    Order.purchase_key == request.idempotency_key)), 1)
+            verify_email(VerifyEmailRequest(token=delivery.call_args.args[1]))
+            forms = concurrent(lambda: create_stage_checkout(order_id))
+            self.assertTrue(all(form == forms[0] for form in forms))
+            self.assertEqual(forms[0].fields["MerchantTradeNo"][:2], "EP")
+
+            config = get_payment_config()
+            now = datetime.now(timezone.utc)
+            provider_paid_at = now - timedelta(days=19)
+            fields = {
+                "MerchantID": config.merchant_id, "MerchantTradeNo": forms[0].fields["MerchantTradeNo"],
+                "TradeAmt": str(attempts[0].amount), "TradeNo": "SyntheticProdPG1",
+                "RtnCode": "1", "PaymentType": "Credit_CreditCard", "SimulatePaid": "0",
+                "PaymentDate": provider_paid_at.astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y/%m/%d %H:%M:%S"),
+            }
+            fields["CheckMacValue"] = check_mac_value(fields, config)
+            def confirm_payment():
+                async def receive():
+                    return {"type": "http.request", "body": urlencode(fields).encode(), "more_body": False}
+                req = Request({"type": "http", "method": "POST",
+                               "headers": [(b"content-type", b"application/x-www-form-urlencoded")]}, receive)
+                return asyncio.run(receive_ecpay_production_result(req)).body
+            self.assertEqual(concurrent(confirm_payment), [b"1|OK"] * 8)
+            with self.factory.begin() as session:
+                order = session.get(Order, order_id)
+                self.assertEqual((order.status, order.payment_environment), ("paid", config.environment))
+                self.assertEqual(session.scalar(select(func.count()).select_from(Entitlement).where(
+                    Entitlement.source_order_id == order_id)), 1)
+                entitlement = session.scalar(select(Entitlement).where(Entitlement.source_order_id == order_id))
+                device = self._synthetic_refund_device(session, entitlement.id, now)
+
+            def access_status():
+                with self.factory() as session:
+                    return verify_online_access(session, device[0], device[1], now)
+
+            evidence = RefundEvidence(
+                order_id=order_id, merchant_id=config.merchant_id,
+                merchant_trade_no=fields["MerchantTradeNo"], provider_trade_no=fields["TradeNo"],
+                amount=attempts[0].amount, currency="TWD", reference="synthetic-request-001",
+                outcome="pending", requested_at=now - timedelta(days=18), evidence_at=now - timedelta(days=18),
+            )
+            with tempfile.TemporaryDirectory() as folder:
+                evidence_path = Path(folder) / "evidence.json"
+                def operate(item=None, apply=False, followups=False):
+                    args = ["refund", "--expected-host", "127.0.0.1", "--expected-database", TEST_DATABASE]
+                    if followups:
+                        args += ["--follow-ups"]
+                    else:
+                        evidence_path.write_text(item.model_dump_json(), encoding="utf-8")
+                        args += ["--actor", "synthetic_operator", "--evidence", str(evidence_path)]
+                        if apply:
+                            args += ["--apply"]
+                    log = io.StringIO()
+                    with patch("sys.argv", args), contextlib.redirect_stdout(log):
+                        status = reconcile_refund.main()
+                    return status, json.loads(log.getvalue())
+
+                self.assertEqual(operate(evidence), (0, {"result": "eligible_dry_run"}))
+                with self.factory() as session:
+                    self.assertEqual(session.get(Order, order_id).status, "paid")
+                    self.assertEqual(session.scalar(select(func.count()).select_from(RefundEvent)), 0)
+                for changes in ({"amount": 1}, {"merchant_id": "123"}, {"provider_trade_no": "Other"},
+                                {"requested_at": now - timedelta(days=10), "evidence_at": now}):
+                    self.assertEqual(operate(evidence.model_copy(update=changes), apply=True)[0], 1)
+                self.assertEqual(operate(evidence, apply=True), (0, {"result": "refund_pending"}))
+                self.assertIsNotNone(access_status())
+                self.assertEqual(operate(followups=True), (0, {"manual_follow_up_order_ids": [str(order_id)]}))
+                for outcome in ("failed", "uncertain"):
+                    item = evidence.model_copy(update={"outcome": outcome, "reference": outcome, "evidence_at": now})
+                    self.assertEqual(operate(item, apply=True), (0, {"result": "refund_pending"}))
+                    self.assertIsNotNone(access_status())
+                confirmed = evidence.model_copy(update={
+                    "outcome": "confirmed", "reference": "provider-confirmed-001", "evidence_at": now,
+                })
+                self.assertEqual(operate(confirmed, apply=True), (0, {"result": "refunded"}))
+                self.assertEqual(operate(confirmed, apply=True), (0, {"result": "already_recorded"}))
+                self.assertEqual(operate(confirmed.model_copy(update={"outcome": "uncertain"}), apply=True)[0], 1)
+                self.assertIsNone(access_status())
+                self.assertEqual(confirm_payment(), b"1|OK")
+                self.assertEqual(operate(followups=True), (0, {"manual_follow_up_order_ids": []}))
+            with self.factory() as session:
+                audit = session.scalars(select(RefundEvent).where(RefundEvent.order_id == order_id)).all()
+                self.assertEqual({event.outcome for event in audit}, {"pending", "failed", "uncertain", "confirmed"})
+                self.assertEqual(len(audit), 4)
+                self.assertTrue(all(event.actor == "synthetic_operator" and len(event.evidence_digest) == 64
+                                    and event.requested_at <= event.evidence_at <= event.recorded_at for event in audit))
+                entitlement = session.scalar(select(Entitlement).where(Entitlement.source_order_id == order_id))
+                self.assertEqual(entitlement.status, "revoked")
+                self.assertEqual(entitlement.revocation_reason, "provider_refund_confirmed")
+
+    def _synthetic_refund_device(self, session, entitlement_id, now):
+        device_id, credential = uuid4(), secrets.token_urlsafe(32)
+        session.add(AuthorizedDevice(
+            entitlement_id=entitlement_id, device_id=device_id,
+            credential_hash=hashlib.sha256(credential.encode()).hexdigest(),
+            registered_at=now, updated_at=now, credential_expires_at=now + timedelta(days=1),
+        ))
+        return device_id, credential
+
+
 class IsolatedPostgresFixtureSafetyTests(unittest.TestCase):
     def test_rejects_non_test_url_and_connection_options(self):
         good = f"postgresql+psycopg://{TEST_ROLE}:fake@127.0.0.1:{TEST_PORT}/{TEST_DATABASE}"

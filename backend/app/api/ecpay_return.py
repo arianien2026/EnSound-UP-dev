@@ -1,4 +1,4 @@
-"""ECPay Stage server-to-server payment-result notification."""
+"""ECPay server-to-server payment-result notifications."""
 
 import hmac
 import re
@@ -13,7 +13,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.database import get_session_factory
 from app.dev_e2e import require_scoped_email
 from app.models import Order
-from app.services.ecpay_stage import check_mac_value, get_stage_config
+from app.services.ecpay_stage import (
+    PRODUCTION_CALLBACK, PRODUCTION_ENVIRONMENT, STAGE_CALLBACK, STAGE_ENVIRONMENT,
+    check_mac_value, get_payment_config, payment_environment,
+)
 from app.services.entitlement_grant import (
     EntitlementGrantUnavailable,
     IneligibleEntitlementOrder,
@@ -54,12 +57,26 @@ def _paid_details(fields: dict[str, str]) -> tuple[str, str, datetime]:
     return trade_no, payment_type, paid_at.replace(tzinfo=ZoneInfo("Asia/Taipei"))
 
 
-@router.post("/payments/ecpay/return", include_in_schema=False)
+@router.post(STAGE_CALLBACK, include_in_schema=False)
 async def receive_ecpay_stage_result(request: Request) -> Response:
-    """Only authenticated, matching notifications receive ECPay's exact acknowledgement."""
+    return await _receive_result(request, STAGE_ENVIRONMENT)
+
+
+@router.post(PRODUCTION_CALLBACK, include_in_schema=False)
+async def receive_ecpay_production_result(request: Request) -> Response:
+    return await _receive_result(request, PRODUCTION_ENVIRONMENT)
+
+
+async def _receive_result(request: Request, environment: str) -> Response:
+    """Acknowledge only authenticated notifications for the configured environment."""
+    try:
+        if payment_environment() != environment:
+            raise HTTPException(status_code=404, detail="Payment notification unavailable")
+    except ValueError:
+        raise HTTPException(status_code=503, detail="Payment notification unavailable") from None
     fields = _notification_fields(await request.body(), request.headers.get("content-type", ""))
     try:
-        config = get_stage_config()
+        config = get_payment_config()
     except ValueError:
         raise HTTPException(status_code=503, detail="Payment notification unavailable") from None
 
@@ -72,7 +89,9 @@ async def receive_ecpay_stage_result(request: Request) -> Response:
         r"[A-Za-z0-9]{1,20}", fields["MerchantTradeNo"]
     ) or not re.fullmatch(r"[0-9]+", fields["TradeAmt"]) or not re.fullmatch(
         r"[0-9]+", fields["RtnCode"]
-    ) or fields.get("SimulatePaid", "0") not in ("0", "1"):
+    ) or fields.get("SimulatePaid", "0") not in ("0", "1") or any(
+        fields.get(key, "TWD") != "TWD" for key in ("Currency", "CurrencyCode")
+    ):
         raise HTTPException(status_code=400, detail="Invalid notification")
 
     success = fields["RtnCode"] == "1" and fields.get("SimulatePaid", "0") == "0"
@@ -87,6 +106,9 @@ async def receive_ecpay_stage_result(request: Request) -> Response:
                     .with_for_update()
                 ).scalar_one_or_none()
                 if (order is None or order.product_code != PRODUCT_CODE or
+                    (order.payment_environment or STAGE_ENVIRONMENT) != environment or
+                    (environment == PRODUCTION_ENVIRONMENT and order.checkout_merchant_id != config.merchant_id) or
+                    order.checkout_merchant_id not in (None, config.merchant_id) or
                     order.currency != "TWD" or type(order.amount) is not int or
                     order.amount <= 0 or str(order.amount) != fields["TradeAmt"] or
                     order.email_verified_at is None):
@@ -97,18 +119,22 @@ async def receive_ecpay_stage_result(request: Request) -> Response:
                     # Keep a plain UUID: the ORM row expires when its session closes.
                     order_id = order.id
                     trade_no, payment_type, provider_paid_at = paid_details
-                    if order.status == "paid":
+                    if order.status == "paid" or (
+                        environment == PRODUCTION_ENVIRONMENT and order.status in ("refund_pending", "refunded")
+                    ):
                         if (order.provider_trade_no != trade_no or
-                            order.payment_environment != "ecpay_stage" or
+                            order.payment_environment != environment or
                             order.provider_payment_type != payment_type or
                             order.provider_paid_at != provider_paid_at):
                             raise HTTPException(status_code=409, detail="Conflicting payment notification")
+                        if order.status == "refunded":
+                            order_id = None
                     elif order.status in ("pending", "expired") and order.provider_trade_no is None:
                         # expires_at gates checkout, not authenticated payment results.
                         order.status = "paid"
                         order.paid_at = datetime.now(timezone.utc)
                         order.provider_trade_no = trade_no
-                        order.payment_environment = "ecpay_stage"
+                        order.payment_environment = environment
                         order.provider_payment_type = payment_type
                         order.provider_paid_at = provider_paid_at
                         session.commit()
@@ -121,7 +147,7 @@ async def receive_ecpay_stage_result(request: Request) -> Response:
                 raise
     except (SQLAlchemyError, RuntimeError, ValueError):
         raise HTTPException(status_code=503, detail="Payment notification unavailable") from None
-    if success:
+    if success and order_id is not None:
         try:
             # The verified payment is durable before the independent grant begins.
             granted = grant_paid_order(order_id)

@@ -1,5 +1,7 @@
 export const PRODUCT = 'ensound_up_web_full_access'
 export const STAGE = 'https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5'
+export const PRODUCTION = 'https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5'
+export type PaymentMode = 'stage' | 'production'
 export const DEVICE_KEY = 'ensound-dev-device-v1'
 const ORDER_KEY = 'ensound-dev-pending-order-v1'
 const DEVICE_ID_KEY = 'ensound-dev-device-id-v1'
@@ -26,20 +28,47 @@ export class BuyerClient {
     orderStatus: '', emailVerified: false, amount: null }
   constructor(private base: string, private store: StorageLike,
     private fetcher: typeof fetch = fetch, private now = () => Date.now(),
-    private newId = () => crypto.randomUUID()) {
+    private newId = () => crypto.randomUUID(), readonly paymentMode: PaymentMode = 'stage') {
     const u = new URL(base)
-    if (!(u.origin === 'https://ensound-up-dev.onrender.com' ||
-          (u.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(u.hostname))) ||
-        u.pathname !== '/' || u.search || u.hash || u.username || u.password) throw new Error('Invalid Development API')
+    const development = u.origin === 'https://ensound-up-dev.onrender.com' ||
+      (u.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(u.hostname))
+    const production = u.protocol === 'https:' && u.hostname.includes('.') &&
+      !u.port && u.hostname !== 'ensound-up-dev.onrender.com'
+    if (!(paymentMode === 'stage' ? development : paymentMode === 'production' && production) ||
+        u.pathname !== '/' || u.search || u.hash || u.username || u.password) throw new Error('Invalid payment API')
     this.base = u.origin
     const orderId = this.read(ORDER_KEY)
     if (orderId && uuidPattern.test(orderId)) this.state.orderId = orderId
   }
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn) } }
   private update(values: Partial<BuyerState>) { this.state = { ...this.state, ...values }; this.listeners.forEach(fn => fn()) }
-  private read(key: string) { try { return this.store.getItem(key) } catch { return null } }
-  private write(key: string, value: string) { this.store.setItem(key, value) }
-  private remove(key: string) { try { this.store.removeItem(key) } catch { /* remain FREE */ } }
+  private storageKey(key: string) { return this.paymentMode === 'stage' ? key : 'production:' + key }
+  private async purchaseKey(email: string): Promise<string> {
+    const split = email.lastIndexOf('@')
+    const normalized = email.slice(0, split + 1) + email.slice(split + 1).toLowerCase()
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
+    const key = 'ensound-purchase-v1:' + this.base + ':' + Array.from(
+      new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0'),
+    ).join('')
+    const reuseOrCreate = () => {
+      const value = this.read(key)
+      const now = this.now()
+      if (value) {
+        const saved = JSON.parse(value)
+        if (uuidPattern.test(saved.id) && Number.isFinite(saved.until) && saved.until > now) return saved.id as string
+      }
+      const id = crypto.randomUUID()
+      this.write(key, JSON.stringify({id, until: now + 2 * 60 * 60 * 1000}))
+      return id
+    }
+    if (globalThis.navigator?.locks) return navigator.locks.request(this.storageKey(key), reuseOrCreate)
+    // A browser without shared locking cannot guarantee safe tab-to-tab retries.
+    if (typeof window !== 'undefined') throw new Error('Shared purchase storage unavailable')
+    return reuseOrCreate() // Isolated runtimes run their clients on one event loop.
+  }
+  private read(key: string) { try { return this.store.getItem(this.storageKey(key)) } catch { return null } }
+  private write(key: string, value: string) { this.store.setItem(this.storageKey(key), value) }
+  private remove(key: string) { try { this.store.removeItem(this.storageKey(key)) } catch { /* remain FREE */ } }
   private async request(path: string, body?: unknown, headers?: Record<string, string>) {
     // Native browser fetch must receive Window, not the BuyerClient instance.
     const response = await this.fetcher.call(globalThis, this.base + path, { method: body === undefined ? 'GET' : 'POST',
@@ -91,13 +120,16 @@ export class BuyerClient {
     }
   }
   async createOrder(email: string, confirmation: string) {
+    if (this.state.busy) return
     if (!email.trim() || email.trim() !== confirmation.trim()) { this.update({ message: 'email_mismatch' }); return }
     this.update({ busy: true })
     try {
-      const data = await this.request('/orders', { email: email.trim() })
-      if (!uuidPattern.test(data.order_id) || !Number.isInteger(data.amount) || data.amount <= 0 || data.currency !== 'TWD' || data.status !== 'pending') throw new Error()
+      const idempotency_key = await this.purchaseKey(email.trim())
+      const data = await this.request('/orders', { email: email.trim(), idempotency_key })
+      if (!uuidPattern.test(data.order_id) || !Number.isInteger(data.amount) || data.amount <= 0 || data.currency !== 'TWD' || !['pending', 'paid', 'expired', 'cancelled', 'refund_pending', 'refunded'].includes(data.status)) throw new Error()
       this.write(ORDER_KEY, data.order_id)
-      this.update({ orderId: data.order_id, orderStatus: 'pending', emailVerified: false, amount: data.amount, message: 'verify_email' })
+      this.update({ orderId: data.order_id, orderStatus: data.status, emailVerified: false, amount: data.amount, message: 'verify_email' })
+      if (data.status !== 'pending') await this.refreshOrder()
     } catch { this.update({ message: 'unavailable' }) }
     finally { this.update({ busy: false }) }
   }
@@ -111,11 +143,11 @@ export class BuyerClient {
     } catch { this.update({ message: 'unavailable' }) }
   }
   async checkout(): Promise<{ checkout_url: string; fields: Record<string, string> } | null> {
-    if (!this.state.orderId) return null
+    if (this.state.busy || !this.state.orderId) return null
     this.update({ busy: true })
     try {
       const data = await this.request('/orders/' + this.state.orderId + '/checkout', {})
-      if (data.checkout_url !== STAGE || !data.fields || Object.values(data.fields).some(v => typeof v !== 'string') ||
+      if (data.checkout_url !== (this.paymentMode === 'production' ? PRODUCTION : STAGE) || !data.fields || Object.values(data.fields).some(v => typeof v !== 'string') ||
           data.fields.MerchantTradeNo === undefined || data.fields.CheckMacValue === undefined || 'HashKey' in data.fields || 'HashIV' in data.fields) throw new Error()
       // Checkout is only navigation; it never changes verified access.
       this.update({ message: 'pending' })

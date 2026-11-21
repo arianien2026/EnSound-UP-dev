@@ -1,35 +1,82 @@
-"""ECPay All-in-One Stage checkout fields and shared checksum."""
+"""ECPay All-in-One payment configuration, checkout fields and checksum."""
 
 import hashlib
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from urllib.parse import quote_plus, urlsplit
 from zoneinfo import ZoneInfo
 
 from app.models import Order
 from app.services.pricing import PRODUCT_CODE
-from app.dev_frontend import dev_frontend_url
+from app.dev_frontend import payment_frontend_url, strict_https_url
 
 
+STAGE_ENVIRONMENT = "ecpay_stage"
+PRODUCTION_ENVIRONMENT = "ecpay_production"
+STAGE_CALLBACK = "/payments/ecpay/return"
+PRODUCTION_CALLBACK = "/payments/ecpay/production/return"
+PRODUCTION_CHECKOUT_URL = "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5"
 STAGE_CHECKOUT_URL = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5"
 
 
 @dataclass(frozen=True)
 class StageConfig:
     merchant_id: str
-    hash_key: str
-    hash_iv: str
+    hash_key: str = field(repr=False)
+    hash_iv: str = field(repr=False)
     return_url: str
+    environment: str = STAGE_ENVIRONMENT
+
+    @property
+    def checkout_url(self) -> str:
+        return PRODUCTION_CHECKOUT_URL if self.environment == PRODUCTION_ENVIRONMENT else STAGE_CHECKOUT_URL
+
+
+def payment_environment() -> str:
+    value = os.environ.get("ECPAY_PAYMENT_ENV", "stage")
+    if value == "stage":
+        return STAGE_ENVIRONMENT
+    if (value == "production"
+            and not os.environ.get("ENSOUND_DEV_DATABASE_HOST")
+            and not os.environ.get("ENSOUND_DEV_FRONTEND_URL")
+            and os.environ.get("ENSOUND_DEV_E2E_ENABLED", "0") == "0"
+            and os.environ.get("RENDER_SERVICE_ID") != "srv-db33dsm7bikc73bhukug"):
+        return PRODUCTION_ENVIRONMENT
+    raise ValueError("Payment environment unavailable")
+
+
+def checkout_enabled(environment: str) -> bool:
+    return environment == STAGE_ENVIRONMENT or os.environ.get("ECPAY_PRODUCTION_CHECKOUT_ENABLED") == "1"
+
+
+def get_payment_config() -> StageConfig:
+    environment = payment_environment()
+    if environment == STAGE_ENVIRONMENT:
+        return get_stage_config()
+    config = _load_config("PRODUCTION", environment)
+    url = strict_https_url(config.return_url)
+    if (url.path != PRODUCTION_CALLBACK or url.query
+            or not re.fullmatch(r"[0-9]{1,10}", config.merchant_id)
+            or config.merchant_id in {"2000132", "3002607", "2000933"}
+            or any(os.environ.get("ECPAY_STAGE_" + key) for key in ("MERCHANT_ID", "HASH_KEY", "HASH_IV", "RETURN_URL"))):
+        raise ValueError("Production payment configuration unavailable")
+    payment_frontend_url(environment)  # Mandatory before issuing a chargeable checkout.
+    return config
 
 
 def get_stage_config() -> StageConfig:
+    return _load_config("STAGE", STAGE_ENVIRONMENT)
+
+
+def _load_config(prefix: str, environment: str) -> StageConfig:
     config = StageConfig(
-        merchant_id=os.environ.get("ECPAY_STAGE_MERCHANT_ID", "").strip(),
-        hash_key=os.environ.get("ECPAY_STAGE_HASH_KEY", ""),
-        hash_iv=os.environ.get("ECPAY_STAGE_HASH_IV", ""),
-        return_url=os.environ.get("ECPAY_STAGE_RETURN_URL", "").strip(),
+        merchant_id=os.environ.get(f"ECPAY_{prefix}_MERCHANT_ID", "").strip(),
+        hash_key=os.environ.get(f"ECPAY_{prefix}_HASH_KEY", ""),
+        hash_iv=os.environ.get(f"ECPAY_{prefix}_HASH_IV", ""),
+        return_url=os.environ.get(f"ECPAY_{prefix}_RETURN_URL", "").strip(),
+        environment=environment,
     )
     url = urlsplit(config.return_url)
     if (
@@ -45,11 +92,11 @@ def get_stage_config() -> StageConfig:
         or url.fragment
         or len(config.return_url) > 200
     ):
-        raise ValueError("ECPay Stage configuration unavailable")
+        raise ValueError("ECPay configuration unavailable")
     try:
         url.port  # Reject malformed port syntax without exposing the URL.
     except ValueError:
-        raise ValueError("ECPay Stage configuration unavailable") from None
+        raise ValueError("ECPay configuration unavailable") from None
     return config
 
 
@@ -70,7 +117,7 @@ def check_mac_value(fields: dict[str, str], config: StageConfig) -> str:
 def merchant_trade_no(order: Order) -> str:
     # One trade number per order, persisted under the existing unique DB
     # constraint. The UUID-derived suffix avoids timestamp collisions.
-    return "ES" + order.id.hex[:18]
+    return ("EP" if order.payment_environment == PRODUCTION_ENVIRONMENT else "ES") + order.id.hex[:18]
 
 
 def checkout_fields(order: Order, trade_no: str, now: datetime, config: StageConfig) -> dict[str, str]:
@@ -80,7 +127,7 @@ def checkout_fields(order: Order, trade_no: str, now: datetime, config: StageCon
         or type(order.amount) is not int
         or order.amount <= 0
     ):
-        raise ValueError("Invalid order for ECPay Stage checkout")
+        raise ValueError("Invalid order for ECPay checkout")
     fields = {
         "MerchantID": config.merchant_id,
         "MerchantTradeNo": trade_no,
@@ -95,7 +142,7 @@ def checkout_fields(order: Order, trade_no: str, now: datetime, config: StageCon
         "ChoosePayment": "ALL",
         "EncryptType": "1",
     }
-    destination = dev_frontend_url()
+    destination = payment_frontend_url(config.environment)
     if destination:
         fields["ClientBackURL"] = destination  # Navigation only, never payment proof.
     fields["CheckMacValue"] = check_mac_value(fields, config)

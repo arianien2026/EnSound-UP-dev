@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.services.ecpay_stage import payment_environment
 from app.models import EmailClaimRateLimit, EmailClaimSession, EmailClaimToken, Entitlement, Order
 from app.services.entitlement_grant import IneligibleEntitlementOrder, _eligible_order
 from app.dev_e2e import require_scoped_email
@@ -86,6 +87,7 @@ def issue_claim_if_eligible(session: Session, email: str, client_ip: str, now: d
             Entitlement.status == "active",
             Order.email_verified_at.is_not(None),
             Order.status.in_(("paid", "refund_pending")),
+            Order.payment_environment == payment_environment(),
         ).order_by(Entitlement.created_at.desc(), Entitlement.id.desc()).limit(1)
     ).scalar_one_or_none()
     if not email_allowed or entitlement is None:
@@ -124,6 +126,7 @@ def redeem_claim(session: Session, token: str, now: datetime) -> str | None:
         return None
     require_scoped_email(entitlement.entitlement_email)
     if (order is None or order.status not in ("paid", "refund_pending") or
+            order.payment_environment != payment_environment() or
             order.email_verified_at is None):
         return None
     session_token = secrets.token_urlsafe(32)
