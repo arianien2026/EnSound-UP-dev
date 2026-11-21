@@ -72,29 +72,22 @@ def _count_request(session: Session, key_hash: str, now: datetime, maximum: int,
     return allowed
 
 
-def claim_eligible_query(email: str, paid_stage_trade: str | None):
-    query = select(Entitlement).join(Order, Entitlement.source_order_id == Order.id).where(
-        Entitlement.entitlement_email == email,
-        Entitlement.status == "active",
-        Order.email_verified_at.is_not(None),
-        Order.status.in_(("paid", "refund_pending")),
-    )
-    if paid_stage_trade is not None:
-        query = query.where(Order.provider_order_id == paid_stage_trade,
-                            Order.payment_environment == "ecpay_stage", Order.status == "paid",
-                            Order.entitlement_email == email)
-    return query.order_by(Entitlement.created_at.desc(), Entitlement.id.desc()).limit(1)
-
-
 def issue_claim_if_eligible(session: Session, email: str, client_ip: str, now: datetime,
-                            secret: bytes, *, paid_stage_trade: str | None = None) -> str | None:
+                            secret: bytes) -> str | None:
     # Count unknown email requests too. A generic HTTP response never discloses this result.
     ip_allowed = _count_request(session, _rate_key(secret, "ip", client_ip), now, 30)
     # A blocked IP cannot create unlimited per-email limiter rows.
     email_allowed = ip_allowed and _count_request(
         session, _rate_key(secret, "email", email), now, 3, EMAIL_MIN_INTERVAL
     )
-    entitlement = session.scalar(claim_eligible_query(email, paid_stage_trade))
+    entitlement = session.execute(
+        select(Entitlement).join(Order, Entitlement.source_order_id == Order.id).where(
+            Entitlement.entitlement_email == email,
+            Entitlement.status == "active",
+            Order.email_verified_at.is_not(None),
+            Order.status.in_(("paid", "refund_pending")),
+        ).order_by(Entitlement.created_at.desc(), Entitlement.id.desc()).limit(1)
+    ).scalar_one_or_none()
     if not email_allowed or entitlement is None:
         return None
     token = secrets.token_urlsafe(32)
